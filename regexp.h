@@ -185,9 +185,9 @@ inline Exp Disjunction(Exp x, Exp y, Variadic... z) {
 // Returns the normalised form of exp.
 Exp Normalised(Exp exp);
 
-// Returns the nullability of exp.
-// When normalised, this expression should be either EmptySet or EmptyString.
-Exp Nullability(Exp exp);
+// Returns the nullability of exp as a bool.
+// EmptySet and EmptyString map to false and true, respectively.
+bool IsNullable(Exp exp);
 
 // Returns the derivative of exp with respect to character.
 Exp Derivative(Exp exp, Rune character);

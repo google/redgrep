@@ -230,68 +230,72 @@ TEST(Normalised, Disjunction) {
       Disjunction(Character('a'), Complement(EmptySet())));
 }
 
-#define EXPECT_NULLABILITY(expected, exp)              \
-  do {                                                 \
-    EXPECT_EQ(expected, Normalised(Nullability(exp))); \
+#define EXPECT_ISNULLABLE(expected, exp) \
+  do {                                   \
+    if (expected) {                      \
+      EXPECT_TRUE(IsNullable(exp));      \
+    } else {                             \
+      EXPECT_FALSE(IsNullable(exp));     \
+    }                                    \
   } while (0)
 
-TEST(Nullability, EmptySet) {
-  EXPECT_NULLABILITY(
-      EmptySet(),
+TEST(IsNullable, EmptySet) {
+  EXPECT_ISNULLABLE(
+      false,
       EmptySet());
 }
 
-TEST(Nullability, EmptyString) {
-  EXPECT_NULLABILITY(
-      EmptyString(),
+TEST(IsNullable, EmptyString) {
+  EXPECT_ISNULLABLE(
+      true,
       EmptyString());
 }
 
-TEST(Nullability, AnyCharacter) {
-  EXPECT_NULLABILITY(
-      EmptySet(),
+TEST(IsNullable, AnyCharacter) {
+  EXPECT_ISNULLABLE(
+      false,
       AnyCharacter());
 }
 
-TEST(Nullability, Character) {
-  EXPECT_NULLABILITY(
-      EmptySet(),
+TEST(IsNullable, Character) {
+  EXPECT_ISNULLABLE(
+      false,
       Character('a'));
 }
 
-TEST(Nullability, CharacterClass) {
-  EXPECT_NULLABILITY(
-      EmptySet(),
+TEST(IsNullable, CharacterClass) {
+  EXPECT_ISNULLABLE(
+      false,
       CharacterClass({'a', 'b', 'c'}));
 }
 
-TEST(Nullability, KleeneClosure) {
-  EXPECT_NULLABILITY(
-      EmptyString(),
+TEST(IsNullable, KleeneClosure) {
+  EXPECT_ISNULLABLE(
+      true,
       KleeneClosure(Character('a')));
 }
 
-TEST(Nullability, Concatenation) {
-  EXPECT_NULLABILITY(
-      EmptySet(),
+TEST(IsNullable, Concatenation) {
+  EXPECT_ISNULLABLE(
+      false,
       Concatenation(Character('a'), Character('b')));
 }
 
-TEST(Nullability, Complement) {
-  EXPECT_NULLABILITY(
-      EmptyString(),
+TEST(IsNullable, Complement) {
+  EXPECT_ISNULLABLE(
+      true,
       Complement(Character('a')));
 }
 
-TEST(Nullability, Conjunction) {
-  EXPECT_NULLABILITY(
-      EmptySet(),
+TEST(IsNullable, Conjunction) {
+  EXPECT_ISNULLABLE(
+      false,
       Conjunction(Character('a'), Character('b')));
 }
 
-TEST(Nullability, Disjunction) {
-  EXPECT_NULLABILITY(
-      EmptySet(),
+TEST(IsNullable, Disjunction) {
+  EXPECT_ISNULLABLE(
+      false,
       Disjunction(Character('a'), Character('b')));
 }
 

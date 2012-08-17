@@ -348,73 +348,61 @@ Exp Normalised(Exp exp) {
   abort();
 }
 
-Exp Nullability(Exp exp) {
+bool IsNullable(Exp exp) {
   switch (exp->kind()) {
     case kEmptySet:
       // ν(∅) = ∅
-      return EmptySet();
+      return false;
 
     case kEmptyString:
       // ν(ε) = ε
-      return EmptyString();
+      return true;
 
     case kAnyCharacter:
       // ν(.) = ∅
-      return EmptySet();
+      return false;
 
     case kCharacter:
       // ν(a) = ∅
-      return EmptySet();
+      return false;
 
     case kCharacterClass:
       // ν(S) = ∅
-      return EmptySet();
+      return false;
 
     case kKleeneClosure:
       // ν(r∗) = ε
-      return EmptyString();
+      return true;
 
     case kConcatenation:
       // ν(r · s) = ν(r) & ν(s)
-      return Conjunction(Nullability(exp->head()),
-                         Nullability(exp->tail()));
+      // Non-lazy form:
+      // return Conjunction(Nullability(exp->head()),
+      //                    Nullability(exp->tail()));
+      return IsNullable(exp->head()) && IsNullable(exp->tail());
 
-    case kComplement: {
-      // ν(¬r) = ε if ν(r) = ∅
-      //         ∅ if ν(r) = ε
-      Exp tmp = Normalised(Nullability(exp->sub()));
-      switch (tmp->kind()) {
-        case kEmptySet:
-          return EmptyString();
+    case kComplement:
+      // ν(¬r) = ∅ if ν(r) = ε
+      //         ε if ν(r) = ∅
+      return !IsNullable(exp->sub());
 
-        case kEmptyString:
-          return EmptySet();
-
-        default:
-          break;
-      }
-      abort();
-    }
-
-    case kConjunction: {
+    case kConjunction:
       // ν(r & s) = ν(r) & ν(s)
-      list<Exp> subs;
       for (Exp sub : exp->subexpressions()) {
-        sub = Nullability(sub);
-        subs.push_back(sub);
+        if (!IsNullable(sub)) {
+          return false;
+        }
       }
-      return Conjunction(subs, false);
-    }
+      return true;
 
-    case kDisjunction: {
+    case kDisjunction:
       // ν(r + s) = ν(r) + ν(s)
-      list<Exp> subs;
       for (Exp sub : exp->subexpressions()) {
-        sub = Nullability(sub);
-        subs.push_back(sub);
+        if (IsNullable(sub)) {
+          return true;
+        }
       }
-      return Disjunction(subs, false);
-    }
+      return false;
   }
   abort();
 }
@@ -457,29 +445,21 @@ Exp Derivative(Exp exp, Rune character) {
       return Concatenation(Derivative(exp->sub(), character),
                            exp);
 
-    case kConcatenation: {
+    case kConcatenation:
       // ∂a(r · s) = ∂ar · s + ν(r) · ∂as
       // Non-lazy form:
       // return Disjunction(Concatenation(Derivative(exp->head(), character),
       //                                  exp->tail()),
       //                    Concatenation(Nullability(exp->head()),
       //                                  Derivative(exp->tail(), character)));
-      Exp tmp = Normalised(Nullability(exp->head()));
-      switch (tmp->kind()) {
-        case kEmptySet:
-          return Concatenation(Derivative(exp->head(), character),
-                               exp->tail());
-
-        case kEmptyString:
-          return Disjunction(Concatenation(Derivative(exp->head(), character),
-                                           exp->tail()),
-                             Derivative(exp->tail(), character));
-
-        default:
-          break;
+      if (IsNullable(exp->head())) {
+        return Disjunction(Concatenation(Derivative(exp->head(), character),
+                                         exp->tail()),
+                           Derivative(exp->tail(), character));
+      } else {
+        return Concatenation(Derivative(exp->head(), character),
+                             exp->tail());
       }
-      abort();
-    }
 
     case kComplement:
       // ∂a(¬r) = ¬(∂ar)
@@ -595,28 +575,19 @@ void Partitions(Exp exp, list<set<Rune>>* partitions) {
       Partitions(exp->sub(), partitions);
       return;
 
-    case kConcatenation: {
-      // C(r · s) = C(r)        if ν(r) = ∅
-      //            C(r) ∧ C(s) if ν(r) = ε
-      Exp tmp = Normalised(Nullability(exp->head()));
-      switch (tmp->kind()) {
-        case kEmptySet:
-          Partitions(exp->head(), partitions);
-          return;
-
-        case kEmptyString: {
-          list<set<Rune>> x, y;
-          Partitions(exp->head(), &x);
-          Partitions(exp->tail(), &y);
-          Intersection(x, y, partitions);
-          return;
-        }
-
-        default:
-          break;
+    case kConcatenation:
+      // C(r · s) = C(r) ∧ C(s) if ν(r) = ε
+      //            C(r)        if ν(r) = ∅
+      if (IsNullable(exp->head())) {
+        list<set<Rune>> x, y;
+        Partitions(exp->head(), &x);
+        Partitions(exp->tail(), &y);
+        Intersection(x, y, partitions);
+        return;
+      } else {
+        Partitions(exp->head(), partitions);
+        return;
       }
-      abort();
-    }
 
     case kComplement:
       // C(¬r) = C(r)
@@ -659,22 +630,6 @@ bool Parse(llvm::StringRef str, Exp* exp) {
   return parser.parse() == 0;
 }
 
-// Returns the nullability of exp as a bool for convenience when matching.
-static bool IsAccepting(Exp exp) {
-  Exp tmp = Normalised(Nullability(exp));
-  switch (tmp->kind()) {
-    case kEmptySet:
-      return false;
-
-    case kEmptyString:
-      return true;
-
-    default:
-      break;
-  }
-  abort();
-}
-
 bool Match(Exp exp, llvm::StringRef str) {
   for (;;) {
     Rune character;
@@ -687,7 +642,7 @@ bool Match(Exp exp, llvm::StringRef str) {
     der = Normalised(der);
     exp = der;
   }
-  bool match = IsAccepting(exp);
+  bool match = IsNullable(exp);
   return match;
 }
 
@@ -703,7 +658,7 @@ int Compile(Exp exp, DFA* dfa) {
     exp = Normalised(exp);
     auto state = states.insert(make_pair(exp, states.size()));
     int curr = state.first->second;
-    dfa->accepting_[curr] = IsAccepting(exp);
+    dfa->accepting_[curr] = IsNullable(exp);
     list<set<Rune>> partitions;
     Partitions(exp, &partitions);
     int next0;
