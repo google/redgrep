@@ -17,6 +17,7 @@
 
 #include <stdint.h>
 
+#include <bitset>
 #include <functional>
 #include <list>
 #include <map>
@@ -27,8 +28,13 @@
 #include "llvm/ADT/StringRef.h"
 #include "utf/utf.h"
 
+namespace llvm {
+class Function;
+}  // namespace llvm
+
 namespace redgrep {
 
+using std::bitset;
 using std::list;
 using std::map;
 using std::pair;
@@ -53,9 +59,9 @@ using std::set;
 enum Kind {
   kEmptySet,
   kEmptyString,
-  kAnyCharacter,
-  kCharacter,
-  kCharacterClass,
+  kAnyByte,
+  kByte,
+  kByteRange,
   kKleeneClosure,
   kConcatenation,
   kComplement,
@@ -72,8 +78,8 @@ typedef std::shared_ptr<Expression> Exp;
 class Expression {
  public:
   explicit Expression(Kind kind);
-  Expression(Kind kind, Rune character);
-  Expression(Kind kind, const set<Rune>& character_class);
+  Expression(Kind kind, int byte);
+  Expression(Kind kind, const pair<int, int>& byte_range);
   Expression(Kind kind, const list<Exp>& subexpressions, bool norm);
   virtual ~Expression();
 
@@ -83,8 +89,8 @@ class Expression {
 
   // Accessors for the expression data. Of course, if you call the wrong
   // function for the expression kind, you're gonna have a bad time.
-  Rune character() const;
-  const set<Rune>& character_class() const;
+  int byte() const;
+  const pair<int, int>& byte_range() const;
   const list<Exp>& subexpressions() const;
 
   // A KleeneClosure or Complement expression has one subexpression.
@@ -145,9 +151,9 @@ namespace redgrep {
 
 Exp EmptySet();
 Exp EmptyString();
-Exp AnyCharacter();
-Exp Character(Rune character);
-Exp CharacterClass(const set<Rune>& character_class);
+Exp AnyByte();
+Exp Byte(int byte);
+Exp ByteRange(const pair<int, int>& byte_range);
 
 Exp KleeneClosure(const list<Exp>& subexpressions, bool norm);
 Exp Concatenation(const list<Exp>& subexpressions, bool norm);
@@ -182,6 +188,10 @@ inline Exp Disjunction(Exp x, Exp y, Variadic... z) {
   return Disjunction({x, y, z...}, false);
 }
 
+Exp AnyCharacter();
+Exp Character(Rune character);
+Exp CharacterClass(const set<Rune>& character_class);
+
 // Returns the normalised form of exp.
 Exp Normalised(Exp exp);
 
@@ -189,12 +199,12 @@ Exp Normalised(Exp exp);
 // EmptySet and EmptyString map to false and true, respectively.
 bool IsNullable(Exp exp);
 
-// Returns the derivative of exp with respect to character.
-Exp Derivative(Exp exp, Rune character);
+// Returns the derivative of exp with respect to byte.
+Exp Derivative(Exp exp, int byte);
 
 // Outputs the partitions computed for exp.
 // The first partition should be Σ-based. Any others should be ∅-based.
-void Partitions(Exp exp, list<set<Rune>>* partitions);
+void Partitions(Exp exp, list<bitset<256>>* partitions);
 
 // Outputs the expression parsed from str.
 // Returns true on success, false on failure.
@@ -205,22 +215,34 @@ bool Match(Exp exp, llvm::StringRef str);
 
 // Represents a deterministic finite automaton.
 struct DFA {
-  map<pair<int, Rune>, int> transition_;
+  map<pair<int, int>, int> transition_;
   map<int, bool> accepting_;
 };
 
-// Returns a value that no valid rune could possibly have.
-// This is used for the "default" transitions between states.
-inline Rune InvalidRune() {
-  return -1;
-}
-
 // Outputs the DFA compiled from exp.
-// Returns the number of states.
-int Compile(Exp exp, DFA* dfa);
+// Returns the number of DFA states.
+size_t Compile(Exp exp, DFA* dfa);
 
 // Returns the result of matching str using dfa.
 bool Match(const DFA& dfa, llvm::StringRef str);
+
+// Represents a function and its machine code.
+// Note that neither the function nor the machine code is owned.
+struct Fun {
+  llvm::Function* function_;
+  void* machine_code_addr_;
+  size_t machine_code_size_;
+};
+
+// Outputs the function compiled from dfa.
+// Returns the number of bytes of machine code.
+size_t Compile(const DFA& dfa, Fun* fun);
+
+// Returns the result of matching str using fun.
+bool Match(const Fun& fun, llvm::StringRef str);
+
+// Deletes the internal state for fun.
+void Delete(const Fun& fun);
 
 }  // namespace redgrep
 

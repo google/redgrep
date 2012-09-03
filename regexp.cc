@@ -14,25 +14,50 @@
 
 #include "regexp.h"
 
+#include <pthread.h>
+
+#include <stdio.h>
 #include <stdlib.h>
 
-#include <algorithm>
-#include <iterator>
+#include <bitset>
 #include <list>
 #include <map>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/BasicBlock.h"
+#include "llvm/Constants.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/JIT.h"
+#include "llvm/ExecutionEngine/JITEventListener.h"
+#include "llvm/Function.h"
+#include "llvm/GlobalValue.h"
+#include "llvm/IRBuilder.h"
+#include "llvm/Instructions.h"
+#include "llvm/LLVMContext.h"
+#include "llvm/Module.h"
+#include "llvm/PassManager.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/Mutex.h"
+#include "llvm/Support/MutexGuard.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetData.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/TypeBuilder.h"
 #include "parser.tab.hh"
 #include "utf/utf.h"
 
 namespace redgrep {
 
+using std::bitset;
 using std::list;
 using std::make_pair;
 using std::map;
+using std::pair;
 using std::set;
+using std::vector;
 
 
 Expression::Expression(Kind kind)
@@ -40,14 +65,14 @@ Expression::Expression(Kind kind)
       data_(0),
       norm_(true) {}
 
-Expression::Expression(Kind kind, Rune character)
+Expression::Expression(Kind kind, int byte)
     : kind_(kind),
-      data_(character),
+      data_(byte),
       norm_(true) {}
 
-Expression::Expression(Kind kind, const set<Rune>& character_class)
+Expression::Expression(Kind kind, const pair<int, int>& byte_range)
     : kind_(kind),
-      data_(reinterpret_cast<intptr_t>(new set<Rune>(character_class))),
+      data_(reinterpret_cast<intptr_t>(new pair<int, int>(byte_range))),
       norm_(true) {}
 
 Expression::Expression(Kind kind, const list<Exp>& subexpressions, bool norm)
@@ -59,14 +84,14 @@ Expression::~Expression() {
   switch (kind()) {
     case kEmptySet:
     case kEmptyString:
-    case kAnyCharacter:
+    case kAnyByte:
       break;
 
-    case kCharacter:
+    case kByte:
       break;
 
-    case kCharacterClass:
-      delete reinterpret_cast<set<Rune>*>(data());
+    case kByteRange:
+      delete reinterpret_cast<pair<int, int>*>(data());
       break;
 
     case kKleeneClosure:
@@ -79,12 +104,12 @@ Expression::~Expression() {
   }
 }
 
-Rune Expression::character() const {
+int Expression::byte() const {
   return data();
 }
 
-const set<Rune>& Expression::character_class() const {
-  return *reinterpret_cast<set<Rune>*>(data());
+const pair<int, int>& Expression::byte_range() const {
+  return *reinterpret_cast<pair<int, int>*>(data());
 }
 
 const list<Exp>& Expression::subexpressions() const {
@@ -101,23 +126,23 @@ int Compare(Exp x, Exp y) {
   switch (x->kind()) {
     case kEmptySet:
     case kEmptyString:
-    case kAnyCharacter:
+    case kAnyByte:
       return 0;
 
-    case kCharacter:
-      if (x->character() < y->character()) {
+    case kByte:
+      if (x->byte() < y->byte()) {
         return -1;
       }
-      if (x->character() > y->character()) {
+      if (x->byte() > y->byte()) {
         return +1;
       }
       return 0;
 
-    case kCharacterClass:
-      if (x->character_class() < y->character_class()) {
+    case kByteRange:
+      if (x->byte_range() < y->byte_range()) {
         return -1;
       }
-      if (x->character_class() > y->character_class()) {
+      if (x->byte_range() > y->byte_range()) {
         return +1;
       }
       return 0;
@@ -153,8 +178,8 @@ int Compare(Exp x, Exp y) {
   abort();
 }
 
-// TODO(junyer): EmptySet, EmptyString and AnyCharacter expressions could be
-// singletons. Character expressions could be cached during parsing.
+// TODO(junyer): EmptySet, EmptyString, AnyByte and AnyCharacter expressions
+// could be singletons.
 
 Exp EmptySet() {
   Exp exp(new Expression(kEmptySet));
@@ -166,18 +191,18 @@ Exp EmptyString() {
   return exp;
 }
 
-Exp AnyCharacter() {
-  Exp exp(new Expression(kAnyCharacter));
+Exp AnyByte() {
+  Exp exp(new Expression(kAnyByte));
   return exp;
 }
 
-Exp Character(Rune character) {
-  Exp exp(new Expression(kCharacter, character));
+Exp Byte(int byte) {
+  Exp exp(new Expression(kByte, byte));
   return exp;
 }
 
-Exp CharacterClass(const set<Rune>& character_class) {
-  Exp exp(new Expression(kCharacterClass, character_class));
+Exp ByteRange(const pair<int, int>& byte_range) {
+  Exp exp(new Expression(kByteRange, byte_range));
   return exp;
 }
 
@@ -206,6 +231,50 @@ Exp Disjunction(const list<Exp>& subexpressions, bool norm) {
   return exp;
 }
 
+Exp AnyCharacter() {
+  Exp b1 = ByteRange(make_pair(0x00, 0x7F));  // 0xxxxxxx
+  Exp bx = ByteRange(make_pair(0x80, 0xBF));  // 10xxxxxx
+  Exp b2 = ByteRange(make_pair(0xC0, 0xDF));  // 110xxxxx
+  Exp b3 = ByteRange(make_pair(0xE0, 0xEF));  // 1110xxxx
+  Exp b4 = ByteRange(make_pair(0xF0, 0xF7));  // 11110xxx
+  return Disjunction(b1,
+                     Concatenation(b2, bx),
+                     Concatenation(b3, bx, bx),
+                     Concatenation(b4, bx, bx, bx));
+}
+
+Exp Character(Rune character) {
+  char buf[4];
+  int len = runetochar(buf, &character);
+  switch (len) {
+    case 1:
+      return Byte(buf[0]);
+    case 2:
+      return Concatenation(Byte(buf[0]),
+                           Byte(buf[1]));
+    case 3:
+      return Concatenation(Byte(buf[0]),
+                           Byte(buf[1]),
+                           Byte(buf[2]));
+    case 4:
+      return Concatenation(Byte(buf[0]),
+                           Byte(buf[1]),
+                           Byte(buf[2]),
+                           Byte(buf[3]));
+    default:
+      break;
+  }
+  abort();
+}
+
+Exp CharacterClass(const set<Rune>& character_class) {
+  list<Exp> subs;
+  for (Rune character : character_class) {
+    subs.push_back(Character(character));
+  }
+  return Disjunction(subs, false);
+}
+
 Exp Normalised(Exp exp) {
   if (exp->norm()) {
     return exp;
@@ -213,9 +282,9 @@ Exp Normalised(Exp exp) {
   switch (exp->kind()) {
     case kEmptySet:
     case kEmptyString:
-    case kAnyCharacter:
-    case kCharacter:
-    case kCharacterClass:
+    case kAnyByte:
+    case kByte:
+    case kByteRange:
       return exp;
 
     case kKleeneClosure: {
@@ -232,8 +301,14 @@ Exp Normalised(Exp exp) {
       if (sub->kind() == kEmptyString) {
         return EmptyString();
       }
+      // \C∗ ≈ ¬∅
+      if (sub->kind() == kAnyByte) {
+        return Complement({EmptySet()}, true);
+      }
       // .∗ ≈ ¬∅
-      if (sub->kind() == kAnyCharacter) {
+      // This is not strictly correct, but it is not the regular expression
+      // engine's job to ensure that the input is structurally valid UTF-8.
+      if (sub == AnyCharacter()) {
         return Complement({EmptySet()}, true);
       }
       return KleeneClosure({sub}, true);
@@ -358,15 +433,15 @@ bool IsNullable(Exp exp) {
       // ν(ε) = ε
       return true;
 
-    case kAnyCharacter:
+    case kAnyByte:
       // ν(.) = ∅
       return false;
 
-    case kCharacter:
+    case kByte:
       // ν(a) = ∅
       return false;
 
-    case kCharacterClass:
+    case kByteRange:
       // ν(S) = ∅
       return false;
 
@@ -407,7 +482,7 @@ bool IsNullable(Exp exp) {
   abort();
 }
 
-Exp Derivative(Exp exp, Rune character) {
+Exp Derivative(Exp exp, int byte) {
   switch (exp->kind()) {
     case kEmptySet:
       // ∂a∅ = ∅
@@ -417,24 +492,24 @@ Exp Derivative(Exp exp, Rune character) {
       // ∂aε = ∅
       return EmptySet();
 
-    case kAnyCharacter:
+    case kAnyByte:
       // ∂a. = ε
       return EmptyString();
 
-    case kCharacter:
+    case kByte:
       // ∂aa = ε
       // ∂ab = ∅ for b ≠ a
-      if (exp->character() == character) {
+      if (exp->byte() == byte) {
         return EmptyString();
       } else {
         return EmptySet();
       }
 
-    case kCharacterClass:
+    case kByteRange:
       // ∂aS = ε if a ∈ S
       //       ∅ if a ∉ S
-      if (exp->character_class().find(character) !=
-          exp->character_class().end()) {
+      if (exp->byte_range().first <= byte &&
+          byte <= exp->byte_range().second) {
         return EmptyString();
       } else {
         return EmptySet();
@@ -442,34 +517,34 @@ Exp Derivative(Exp exp, Rune character) {
 
     case kKleeneClosure:
       // ∂a(r∗) = ∂ar · r∗
-      return Concatenation(Derivative(exp->sub(), character),
+      return Concatenation(Derivative(exp->sub(), byte),
                            exp);
 
     case kConcatenation:
       // ∂a(r · s) = ∂ar · s + ν(r) · ∂as
       // Non-lazy form:
-      // return Disjunction(Concatenation(Derivative(exp->head(), character),
+      // return Disjunction(Concatenation(Derivative(exp->head(), byte),
       //                                  exp->tail()),
       //                    Concatenation(Nullability(exp->head()),
-      //                                  Derivative(exp->tail(), character)));
+      //                                  Derivative(exp->tail(), byte)));
       if (IsNullable(exp->head())) {
-        return Disjunction(Concatenation(Derivative(exp->head(), character),
+        return Disjunction(Concatenation(Derivative(exp->head(), byte),
                                          exp->tail()),
-                           Derivative(exp->tail(), character));
+                           Derivative(exp->tail(), byte));
       } else {
-        return Concatenation(Derivative(exp->head(), character),
+        return Concatenation(Derivative(exp->head(), byte),
                              exp->tail());
       }
 
     case kComplement:
       // ∂a(¬r) = ¬(∂ar)
-      return Complement(Derivative(exp->sub(), character));
+      return Complement(Derivative(exp->sub(), byte));
 
     case kConjunction: {
       // ∂a(r & s) = ∂ar & ∂as
       list<Exp> subs;
       for (Exp sub : exp->subexpressions()) {
-        sub = Derivative(sub, character);
+        sub = Derivative(sub, byte);
         subs.push_back(sub);
       }
       return Conjunction(subs, false);
@@ -479,7 +554,7 @@ Exp Derivative(Exp exp, Rune character) {
       // ∂a(r + s) = ∂ar + ∂as
       list<Exp> subs;
       for (Exp sub : exp->subexpressions()) {
-        sub = Derivative(sub, character);
+        sub = Derivative(sub, byte);
         subs.push_back(sub);
       }
       return Disjunction(subs, false);
@@ -490,49 +565,41 @@ Exp Derivative(Exp exp, Rune character) {
 
 // Outputs the partitions obtained by intersecting the partitions in x and y.
 // The first partition should be Σ-based. Any others should be ∅-based.
-static void Intersection(const list<set<Rune>>& x,
-                         const list<set<Rune>>& y,
-                         list<set<Rune>>* z) {
-  for (list<set<Rune>>::const_iterator xi = x.begin();
+static void Intersection(const list<bitset<256>>& x,
+                         const list<bitset<256>>& y,
+                         list<bitset<256>>* z) {
+  for (list<bitset<256>>::const_iterator xi = x.begin();
        xi != x.end();
        ++xi) {
-    for (list<set<Rune>>::const_iterator yi = y.begin();
+    for (list<bitset<256>>::const_iterator yi = y.begin();
          yi != y.end();
          ++yi) {
-      set<Rune> s;
+      bitset<256> bs;
       if (xi == x.begin()) {
         if (yi == y.begin()) {
-          // *xi is Σ-based, *yi is Σ-based.
-          std::set_union(xi->begin(), xi->end(),
-                         yi->begin(), yi->end(),
-                         std::inserter(s, s.end()));
-          // s is Σ-based, so it can be empty.
-          z->push_back(s);
+          // Perform set union: *xi is Σ-based, *yi is Σ-based.
+          bs = *xi | *yi;
+          // bs is Σ-based, so it can be empty.
+          z->push_back(bs);
         } else {
-          // *xi is Σ-based, *yi is ∅-based.
-          std::set_difference(yi->begin(), yi->end(),
-                              xi->begin(), xi->end(),
-                              std::inserter(s, s.end()));
-          if (!s.empty()) {
-            z->push_back(s);
+          // Perform set difference: *xi is Σ-based, *yi is ∅-based.
+          bs = *yi & ~*xi;
+          if (bs.any()) {
+            z->push_back(bs);
           }
         }
       } else {
         if (yi == y.begin()) {
-          // *xi is ∅-based, *yi is Σ-based.
-          std::set_difference(xi->begin(), xi->end(),
-                              yi->begin(), yi->end(),
-                              std::inserter(s, s.end()));
-          if (!s.empty()) {
-            z->push_back(s);
+          // Perform set difference: *xi is ∅-based, *yi is Σ-based.
+          bs = *xi & ~*yi;
+          if (bs.any()) {
+            z->push_back(bs);
           }
         } else {
-          // *xi is ∅-based, *yi is ∅-based.
-          std::set_intersection(yi->begin(), yi->end(),
-                                xi->begin(), xi->end(),
-                                std::inserter(s, s.end()));
-          if (!s.empty()) {
-            z->push_back(s);
+          // Perform set intersection: *xi is ∅-based, *yi is ∅-based.
+          bs = *yi & *xi;
+          if (bs.any()) {
+            z->push_back(bs);
           }
         }
       }
@@ -540,7 +607,7 @@ static void Intersection(const list<set<Rune>>& x,
   }
 }
 
-void Partitions(Exp exp, list<set<Rune>>* partitions) {
+void Partitions(Exp exp, list<bitset<256>>* partitions) {
   partitions->clear();
   switch (exp->kind()) {
     case kEmptySet:
@@ -553,22 +620,32 @@ void Partitions(Exp exp, list<set<Rune>>* partitions) {
       partitions->push_back({});
       return;
 
-    case kAnyCharacter:
+    case kAnyByte:
       // C(.) = {Σ}
       partitions->push_back({});
       return;
 
-    case kCharacter:
-      // C(a) = {a, Σ \ a}
-      partitions->push_back({exp->character()});
-      partitions->push_back({exp->character()});
+    case kByte: {
+      // C(a) = {Σ \ a, a}
+      bitset<256> bs;
+      bs.set(exp->byte());
+      partitions->push_back(bs);
+      partitions->push_back(bs);
       return;
+    }
 
-    case kCharacterClass:
-      // C(S) = {S, Σ \ S}
-      partitions->push_back(exp->character_class());
-      partitions->push_back(exp->character_class());
+    case kByteRange: {
+      // C(S) = {Σ \ S, S}
+      bitset<256> bs;
+      for (int i = exp->byte_range().first;
+           i <= exp->byte_range().second;
+           ++i) {
+        bs.set(i);
+      }
+      partitions->push_back(bs);
+      partitions->push_back(bs);
       return;
+    }
 
     case kKleeneClosure:
       // C(r∗) = C(r)
@@ -579,7 +656,7 @@ void Partitions(Exp exp, list<set<Rune>>* partitions) {
       // C(r · s) = C(r) ∧ C(s) if ν(r) = ε
       //            C(r)        if ν(r) = ∅
       if (IsNullable(exp->head())) {
-        list<set<Rune>> x, y;
+        list<bitset<256>> x, y;
         Partitions(exp->head(), &x);
         Partitions(exp->tail(), &y);
         Intersection(x, y, partitions);
@@ -600,7 +677,7 @@ void Partitions(Exp exp, list<set<Rune>>* partitions) {
         if (partitions->empty()) {
           Partitions(sub, partitions);
         } else {
-          list<set<Rune>> x, y;
+          list<bitset<256>> x, y;
           std::swap(*partitions, x);
           Partitions(sub, &y);
           Intersection(x, y, partitions);
@@ -614,7 +691,7 @@ void Partitions(Exp exp, list<set<Rune>>* partitions) {
         if (partitions->empty()) {
           Partitions(sub, partitions);
         } else {
-          list<set<Rune>> x, y;
+          list<bitset<256>> x, y;
           std::swap(*partitions, x);
           Partitions(sub, &y);
           Intersection(x, y, partitions);
@@ -631,14 +708,10 @@ bool Parse(llvm::StringRef str, Exp* exp) {
 }
 
 bool Match(Exp exp, llvm::StringRef str) {
-  for (;;) {
-    Rune character;
-    int len = charntorune(&character, str.data(), str.size());
-    if (len == 0) {
-      break;
-    }
-    str = str.substr(len);
-    Exp der = Derivative(exp, character);
+  while (!str.empty()) {
+    int byte = str[0];
+    str = str.substr(1);
+    Exp der = Derivative(exp, byte);
     der = Normalised(der);
     exp = der;
   }
@@ -646,7 +719,7 @@ bool Match(Exp exp, llvm::StringRef str) {
   return match;
 }
 
-int Compile(Exp exp, DFA* dfa) {
+size_t Compile(Exp exp, DFA* dfa) {
   dfa->transition_.clear();
   dfa->accepting_.clear();
   map<Exp, int> states;
@@ -659,21 +732,21 @@ int Compile(Exp exp, DFA* dfa) {
     auto state = states.insert(make_pair(exp, states.size()));
     int curr = state.first->second;
     dfa->accepting_[curr] = IsNullable(exp);
-    list<set<Rune>> partitions;
+    list<bitset<256>> partitions;
     Partitions(exp, &partitions);
     int next0;
-    for (list<set<Rune>>::const_iterator i = partitions.begin();
+    for (list<bitset<256>>::const_iterator i = partitions.begin();
          i != partitions.end();
          ++i) {
-      Rune character;
+      int byte;
       if (i == partitions.begin()) {
-        // *i is Σ-based. Use a character that it doesn't contain. ;)
-        character = InvalidRune();
+        // *i is Σ-based. Use a byte that it doesn't contain. ;)
+        byte = -1;
       } else {
-        // *i is ∅-based. Use the first character that it contains.
-        character = *i->begin();
+        // *i is ∅-based. Use the first byte that it contains.
+        for (byte = 0; !i->test(byte); ++byte) {}
       }
-      Exp der = Derivative(exp, character);
+      Exp der = Derivative(exp, byte);
       der = Normalised(der);
       auto state = states.insert(make_pair(der, states.size()));
       int next = state.first->second;
@@ -682,11 +755,13 @@ int Compile(Exp exp, DFA* dfa) {
       }
       if (i == partitions.begin()) {
         // Set the "default" transition.
-        dfa->transition_[make_pair(curr, character)] = next;
+        dfa->transition_[make_pair(curr, byte)] = next;
         next0 = next;
       } else if (next != next0) {
-        for (Rune character : *i) {
-          dfa->transition_[make_pair(curr, character)] = next;
+        for (byte = 0; byte < 256; ++byte) {
+          if (i->test(byte)) {
+            dfa->transition_[make_pair(curr, byte)] = next;
+          }
         }
       }
     }
@@ -696,18 +771,14 @@ int Compile(Exp exp, DFA* dfa) {
 
 bool Match(const DFA& dfa, llvm::StringRef str) {
   int curr = 0;
-  for (;;) {
-    Rune character;
-    int len = charntorune(&character, str.data(), str.size());
-    if (len == 0) {
-      break;
-    }
-    str = str.substr(len);
-    auto transition = dfa.transition_.find(make_pair(curr, character));
+  while (!str.empty()) {
+    int byte = str[0];
+    str = str.substr(1);
+    auto transition = dfa.transition_.find(make_pair(curr, byte));
     if (transition == dfa.transition_.end()) {
       // Get the "default" transition.
-      character = InvalidRune();
-      transition = dfa.transition_.find(make_pair(curr, character));
+      byte = -1;
+      transition = dfa.transition_.find(make_pair(curr, byte));
     }
     int next = transition->second;
     curr = next;
@@ -715,6 +786,194 @@ bool Match(const DFA& dfa, llvm::StringRef str) {
   auto accepting = dfa.accepting_.find(curr);
   bool match = accepting->second;
   return match;
+}
+
+}  // namespace redgrep
+
+namespace llvm {
+
+template <>
+class TypeBuilder<bool, false> : public TypeBuilder<types::i<1>, false> {};
+
+}  // namespace llvm
+
+namespace redgrep {
+
+struct LLVM {
+  llvm::sys::Mutex mutex_;
+  llvm::LLVMContext* context_;
+  llvm::Module* module_;
+  llvm::ExecutionEngine* engine_;
+  llvm::FunctionPassManager* passes_;
+  int i_;  // monotonic counter, used for names
+};
+
+static LLVM* llvm_singleton;
+static pthread_once_t llvm_once = PTHREAD_ONCE_INIT;
+
+static void LLVMOnce() {
+  llvm::InitializeNativeTarget();
+
+  LLVM* llvm = new LLVM;
+  llvm->context_ = new llvm::LLVMContext;
+  llvm->module_ = new llvm::Module("M", *llvm->context_);
+  llvm->engine_ = llvm::EngineBuilder(llvm->module_).create();
+  llvm->passes_ = new llvm::FunctionPassManager(llvm->module_);
+  llvm->passes_->add(new llvm::TargetData(*llvm->engine_->getTargetData()));
+  llvm->passes_->add(llvm::createCodeGenPreparePass());
+  llvm->passes_->add(llvm::createPromoteMemoryToRegisterPass());
+  llvm->passes_->add(llvm::createLoopDeletionPass());
+  llvm->i_ = 0;
+
+  llvm_singleton = llvm;
+}
+
+static LLVM* GetLLVMSingleton() {
+  pthread_once(&llvm_once, &LLVMOnce);
+  return llvm_singleton;
+}
+
+typedef bool NativeMatch(const char*, int);
+
+// Generates the function for the DFA.
+static void GenerateFunction(const DFA& dfa, Fun* fun) {
+  LLVM* llvm = GetLLVMSingleton();
+  llvm::LLVMContext& context = *llvm->context_;
+  llvm::Module* module = llvm->module_;
+  char buf[64];  // scratch space, used for names
+
+  // Create the Function.
+  snprintf(buf, sizeof buf, "F%d", llvm->i_++);
+  llvm::Function* function = llvm::Function::Create(
+      llvm::TypeBuilder<NativeMatch, false>::get(context),
+      llvm::GlobalValue::ExternalLinkage, buf, module);
+
+  // Create the entry BasicBlock and two automatic variables, then store the
+  // Function Arguments in the automatic variables.
+  llvm::BasicBlock* entry = llvm::BasicBlock::Create(
+      context, "entry", function);
+  llvm::IRBuilder<> bb(entry);
+  llvm::AllocaInst* data = bb.CreateAlloca(
+      llvm::TypeBuilder<const char*, false>::get(context), 0, "data");
+  llvm::AllocaInst* size = bb.CreateAlloca(
+      llvm::TypeBuilder<int, false>::get(context), 0, "size");
+  llvm::Function::arg_iterator arg = function->arg_begin();
+  bb.CreateStore(arg++, data);
+  bb.CreateStore(arg++, size);
+
+  // Create a BasicBlock that returns true.
+  llvm::BasicBlock* return_true = llvm::BasicBlock::Create(
+      context, "return_true", function);
+  bb.SetInsertPoint(return_true);
+  bb.CreateRet(bb.getTrue());
+
+  // Create a BasicBlock that returns false.
+  llvm::BasicBlock* return_false = llvm::BasicBlock::Create(
+      context, "return_false", function);
+  bb.SetInsertPoint(return_false);
+  bb.CreateRet(bb.getFalse());
+
+  // Create two BasicBlocks per DFA state: the first branches if we have hit
+  // the end of the string; the second switches to the next DFA state after
+  // updating the automatic variables.
+  int nstates = dfa.transition_.rbegin()->first.first + 1;
+  vector<pair<llvm::BasicBlock*, llvm::BasicBlock*>> states;
+  states.reserve(nstates);
+  for (int curr = 0; curr < nstates; ++curr) {
+    llvm::BasicBlock* bb0 = llvm::BasicBlock::Create(context, "", function);
+    llvm::BasicBlock* bb1 = llvm::BasicBlock::Create(context, "", function);
+
+    bb.SetInsertPoint(bb0);
+    bb.CreateCondBr(
+        bb.CreateIsNull(bb.CreateLoad(size)),
+        dfa.accepting_.find(curr)->second ? return_true : return_false,
+        bb1);
+
+    bb.SetInsertPoint(bb1);
+    llvm::LoadInst* byte = bb.CreateLoad(bb.CreateLoad(data));
+    bb.CreateStore(bb.CreateGEP(bb.CreateLoad(data), bb.getInt32(1)), data);
+    bb.CreateStore(bb.CreateSub(bb.CreateLoad(size), bb.getInt32(1)), size);
+    // Set the "default" transition to ourselves for now. We could look it up,
+    // but its BasicBlock might not exist yet, so we will just fix it up later.
+    bb.CreateSwitch(byte, bb0);
+
+    states.push_back(make_pair(bb0, bb1));
+  }
+
+  // Wire up the BasicBlocks.
+  for (const auto& i : dfa.transition_) {
+    // Get the current DFA state.
+    llvm::BasicBlock* bb1 = states[i.first.first].second;
+    llvm::SwitchInst* swi = llvm::cast<llvm::SwitchInst>(bb1->getTerminator());
+    // Get the next DFA state.
+    llvm::BasicBlock* bb0 = states[i.second].first;
+    if (i.first.second == -1) {
+      // Set the "default" transition.
+      swi->setDefaultDest(bb0);
+    } else {
+      swi->addCase(
+          llvm::ConstantInt::get(
+              llvm::TypeBuilder<char, false>::get(context),
+              i.first.second),
+          bb0);
+    }
+  }
+
+  // Plug in the entry BasicBlock.
+  bb.SetInsertPoint(entry);
+  bb.CreateBr(states[0].first);
+
+  // Run the transform passes.
+  llvm->passes_->run(*function);
+  fun->function_ = function;
+}
+
+// This seems to be the only way to discover the machine code size.
+class DiscoverMachineCodeSize : public llvm::JITEventListener {
+ public:
+  explicit DiscoverMachineCodeSize(Fun* fun)
+      : llvm::JITEventListener(), fun_(fun) {}
+  virtual ~DiscoverMachineCodeSize() {}
+
+  virtual void NotifyFunctionEmitted(const llvm::Function&,
+                                     void* addr,
+                                     size_t size,
+                                     const EmittedFunctionDetails&) {
+    fun_->machine_code_addr_ = addr;
+    fun_->machine_code_size_ = size;
+  }
+
+ private:
+  Fun* fun_;
+};
+
+// Generates the machine code for the function.
+static void GenerateMachineCode(Fun* fun) {
+  LLVM* llvm = GetLLVMSingleton();
+  DiscoverMachineCodeSize dmcs(fun);
+  llvm->engine_->RegisterJITEventListener(&dmcs);
+  llvm->engine_->getPointerToFunction(fun->function_);
+  llvm->engine_->UnregisterJITEventListener(&dmcs);
+}
+
+size_t Compile(const DFA& dfa, Fun* fun) {
+  LLVM* llvm = GetLLVMSingleton();
+  llvm::MutexGuard guard(llvm->mutex_);
+  GenerateFunction(dfa, fun);
+  GenerateMachineCode(fun);
+  return fun->machine_code_size_;
+}
+
+bool Match(const Fun& fun, llvm::StringRef str) {
+  NativeMatch* match = reinterpret_cast<NativeMatch*>(fun.machine_code_addr_);
+  return (*match)(str.data(), str.size());
+}
+
+void Delete(const Fun& fun) {
+  LLVM* llvm = GetLLVMSingleton();
+  llvm::MutexGuard guard(llvm->mutex_);
+  llvm->engine_->freeMachineCodeForFunction(fun.function_);
+  fun.function_->eraseFromParent();
 }
 
 }  // namespace redgrep

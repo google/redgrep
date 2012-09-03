@@ -45,7 +45,7 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, llvm::StringRef* input);
 %right CONCATENATION
 %left ZERO_OR_MORE ONE_OR_MORE ZERO_OR_ONE
 %nonassoc LEFT_PARENTHESIS RIGHT_PARENTHESIS
-%nonassoc CHARACTERCLASS CHARACTER ANYCHARACTER
+%nonassoc FUNDAMENTAL
 %token ERROR
 
 %%
@@ -71,11 +71,7 @@ expression:
   { $$ = redgrep::Disjunction(redgrep::EmptyString(), $1); }
 | LEFT_PARENTHESIS expression RIGHT_PARENTHESIS
   { $$ = $2; }
-| CHARACTERCLASS
-  { $$ = $1; }
-| CHARACTER
-  { $$ = $1; }
-| ANYCHARACTER
+| FUNDAMENTAL
   { $$ = $1; }
 
 %%
@@ -118,6 +114,22 @@ static bool CharacterClass(llvm::StringRef* input,
       case '\\':
         if (!Character(input, &character)) {
           return false;
+        }
+        switch (character) {
+          case 'f':
+            character = '\f';
+            break;
+          case 'n':
+            character = '\n';
+            break;
+          case 'r':
+            character = '\r';
+            break;
+          case 't':
+            character = '\t';
+            break;
+          default:
+            break;
         }
         // FALLTHROUGH
       default:
@@ -168,18 +180,37 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, llvm::StringRef* input) {
         *lvalp = redgrep::Conjunction(redgrep::Complement(*lvalp),
                                       redgrep::AnyCharacter());
       }
-      return TokenType::CHARACTERCLASS;
+      return TokenType::FUNDAMENTAL;
     }
     case '\\':
       if (!Character(input, &character)) {
         return TokenType::ERROR;
       }
+      switch (character) {
+        case 'C':
+          *lvalp = redgrep::AnyByte();
+          return TokenType::FUNDAMENTAL;
+        case 'f':
+          character = '\f';
+          break;
+        case 'n':
+          character = '\n';
+          break;
+        case 'r':
+          character = '\r';
+          break;
+        case 't':
+          character = '\t';
+          break;
+        default:
+          break;
+      }
       // FALLTHROUGH
     default:
       *lvalp = redgrep::Character(character);
-      return TokenType::CHARACTER;
+      return TokenType::FUNDAMENTAL;
     case '.':
       *lvalp = redgrep::AnyCharacter();
-      return TokenType::ANYCHARACTER;
+      return TokenType::FUNDAMENTAL;
   }
 }

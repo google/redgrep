@@ -29,73 +29,73 @@ TEST(Compare, EmptyString) {
       EmptyString());
 }
 
-TEST(Compare, AnyCharacter) {
+TEST(Compare, AnyByte) {
   EXPECT_EQ(
-      AnyCharacter(),
-      AnyCharacter());
+      AnyByte(),
+      AnyByte());
 }
 
-TEST(Compare, Character) {
+TEST(Compare, Byte) {
   EXPECT_EQ(
-      Character('a'),
-      Character('a'));
+      Byte('a'),
+      Byte('a'));
   EXPECT_LT(
-      Character('a'),
-      Character('b'));
+      Byte('a'),
+      Byte('b'));
 }
 
-TEST(Compare, CharacterClass) {
+TEST(Compare, ByteRange) {
   EXPECT_EQ(
-      CharacterClass({'a', 'b', 'c'}),
-      CharacterClass({'a', 'b', 'c'}));
+      ByteRange({'a', 'c'}),
+      ByteRange({'a', 'c'}));
   EXPECT_LT(
-      CharacterClass({'a', 'b', 'c'}),
-      CharacterClass({'b', 'c', 'd'}));
+      ByteRange({'a', 'c'}),
+      ByteRange({'b', 'd'}));
 }
 
 TEST(Compare, KleeneClosure) {
   EXPECT_EQ(
-      KleeneClosure(Character('a')),
-      KleeneClosure(Character('a')));
+      KleeneClosure(Byte('a')),
+      KleeneClosure(Byte('a')));
   EXPECT_LT(
-      KleeneClosure(Character('a')),
-      KleeneClosure(Character('b')));
+      KleeneClosure(Byte('a')),
+      KleeneClosure(Byte('b')));
 }
 
 TEST(Compare, Concatenation) {
   EXPECT_EQ(
-      Concatenation(Character('a'), Character('b'), Character('c')),
-      Concatenation(Character('a'), Character('b'), Character('c')));
+      Concatenation(Byte('a'), Byte('b'), Byte('c')),
+      Concatenation(Byte('a'), Byte('b'), Byte('c')));
   EXPECT_LT(
-      Concatenation(Character('a'), Character('b'), Character('c')),
-      Concatenation(Character('b'), Character('c'), Character('d')));
+      Concatenation(Byte('a'), Byte('b'), Byte('c')),
+      Concatenation(Byte('b'), Byte('c'), Byte('d')));
 }
 
 TEST(Compare, Complement) {
   EXPECT_EQ(
-      Complement(Character('a')),
-      Complement(Character('a')));
+      Complement(Byte('a')),
+      Complement(Byte('a')));
   EXPECT_LT(
-      Complement(Character('a')),
-      Complement(Character('b')));
+      Complement(Byte('a')),
+      Complement(Byte('b')));
 }
 
 TEST(Compare, Conjunction) {
   EXPECT_EQ(
-      Conjunction(Character('a'), Character('b'), Character('c')),
-      Conjunction(Character('a'), Character('b'), Character('c')));
+      Conjunction(Byte('a'), Byte('b'), Byte('c')),
+      Conjunction(Byte('a'), Byte('b'), Byte('c')));
   EXPECT_LT(
-      Conjunction(Character('a'), Character('b'), Character('c')),
-      Conjunction(Character('b'), Character('c'), Character('d')));
+      Conjunction(Byte('a'), Byte('b'), Byte('c')),
+      Conjunction(Byte('b'), Byte('c'), Byte('d')));
 }
 
 TEST(Compare, Disjunction) {
   EXPECT_EQ(
-      Disjunction(Character('a'), Character('b'), Character('c')),
-      Disjunction(Character('a'), Character('b'), Character('c')));
+      Disjunction(Byte('a'), Byte('b'), Byte('c')),
+      Disjunction(Byte('a'), Byte('b'), Byte('c')));
   EXPECT_LT(
-      Disjunction(Character('a'), Character('b'), Character('c')),
-      Disjunction(Character('b'), Character('c'), Character('d')));
+      Disjunction(Byte('a'), Byte('b'), Byte('c')),
+      Disjunction(Byte('b'), Byte('c'), Byte('d')));
 }
 
 #define EXPECT_NORMALISED(expected, exp)  \
@@ -115,28 +115,28 @@ TEST(Normalised, EmptyString) {
       EmptyString());
 }
 
-TEST(Normalised, AnyCharacter) {
+TEST(Normalised, AnyByte) {
   EXPECT_NORMALISED(
-      AnyCharacter(),
-      AnyCharacter());
+      AnyByte(),
+      AnyByte());
 }
 
-TEST(Normalised, Character) {
+TEST(Normalised, Byte) {
   EXPECT_NORMALISED(
-      Character('a'),
-      Character('a'));
+      Byte('a'),
+      Byte('a'));
 }
 
-TEST(Normalised, CharacterClass) {
+TEST(Normalised, ByteRange) {
   EXPECT_NORMALISED(
-      CharacterClass({'a', 'b', 'c'}),
-      CharacterClass({'a', 'b', 'c'}));
+      ByteRange({'a', 'c'}),
+      ByteRange({'a', 'c'}));
 }
 
 TEST(Normalised, KleeneClosure) {
   EXPECT_NORMALISED(
-      KleeneClosure(Character('a')),
-      KleeneClosure(KleeneClosure(Character('a'))));
+      KleeneClosure(Byte('a')),
+      KleeneClosure(KleeneClosure(Byte('a'))));
   EXPECT_NORMALISED(
       EmptyString(),
       KleeneClosure(EmptySet()));
@@ -145,89 +145,92 @@ TEST(Normalised, KleeneClosure) {
       KleeneClosure(EmptyString()));
   EXPECT_NORMALISED(
       Complement(EmptySet()),
+      KleeneClosure(AnyByte()));
+  EXPECT_NORMALISED(
+      Complement(EmptySet()),
       KleeneClosure(AnyCharacter()));
 }
 
 TEST(Normalised, Concatenation) {
   EXPECT_NORMALISED(
       Concatenation(
-          Character('a'),
+          Byte('a'),
           Concatenation(
-              Character('b'),
-              Character('c'))),
+              Byte('b'),
+              Byte('c'))),
       Concatenation(
           Concatenation(
-              Character('a'),
-              Character('b')),
-          Character('c')));
+              Byte('a'),
+              Byte('b')),
+          Byte('c')));
   EXPECT_NORMALISED(
       EmptySet(),
-      Concatenation(EmptySet(), Character('a')));
+      Concatenation(EmptySet(), Byte('a')));
   EXPECT_NORMALISED(
       EmptySet(),
-      Concatenation(Character('a'), EmptySet()));
+      Concatenation(Byte('a'), EmptySet()));
   EXPECT_NORMALISED(
-      Character('a'),
-      Concatenation(EmptyString(), Character('a')));
+      Byte('a'),
+      Concatenation(EmptyString(), Byte('a')));
   EXPECT_NORMALISED(
-      Character('a'),
-      Concatenation(Character('a'), EmptyString()));
+      Byte('a'),
+      Concatenation(Byte('a'), EmptyString()));
 }
 
 TEST(Normalised, Complement) {
   EXPECT_NORMALISED(
-      Character('a'),
-      Complement(Complement(Character('a'))));
+      Byte('a'),
+      Complement(Complement(Byte('a'))));
 }
 
 TEST(Normalised, Conjunction) {
   EXPECT_NORMALISED(
       Conjunction(
-          Character('a'),
-          Character('b'),
-          Character('c')),
+          Byte('a'),
+          Byte('b'),
+          Byte('c')),
       Conjunction(
           Conjunction(
-              Character('a'),
-              Character('b')),
-          Character('c')));
+              Byte('a'),
+              Byte('b')),
+          Byte('c')));
   EXPECT_NORMALISED(
-      Conjunction(Character('a'), Character('b')),
-      Conjunction(Character('b'), Character('a')));
+      Conjunction(Byte('a'), Byte('b')),
+      Conjunction(Byte('b'), Byte('a')));
   EXPECT_NORMALISED(
-      Character('a'),
-      Conjunction(Character('a'), Character('a')));
+      Byte('a'),
+      Conjunction(Byte('a'), Byte('a')));
   EXPECT_NORMALISED(
       EmptySet(),
-      Conjunction(Character('a'), EmptySet()));
+      Conjunction(Byte('a'), EmptySet()));
   EXPECT_NORMALISED(
-      Character('a'),
-      Conjunction(Character('a'), Complement(EmptySet())));
+      Byte('a'),
+      Conjunction(Byte('a'), Complement(EmptySet())));
 }
 
 TEST(Normalised, Disjunction) {
   EXPECT_NORMALISED(
       Disjunction(
-          Character('a'),
-          Character('b'),
-          Character('c')),
+          Byte('a'),
+          Byte('b'),
+          Byte('c')),
       Disjunction(
           Disjunction(
-              Character('a'),
-              Character('b')),
-          Character('c')));
+              Byte('a'),
+              Byte('b')),
+          Byte('c')));
   EXPECT_NORMALISED(
-      Disjunction(Character('a'), Character('b')),
-      Disjunction(Character('b'), Character('a')));
+      Disjunction(Byte('a'), Byte('b')),
+      Disjunction(Byte('b'), Byte('a')));
   EXPECT_NORMALISED(
-      Character('a'),
-      Disjunction(Character('a'), Character('a')));
+      Byte('a'),
+      Disjunction(Byte('a'), Byte('a')));
   EXPECT_NORMALISED(
-      Character('a'),
-      Disjunction(Character('a'), EmptySet()));
+      Byte('a'),
+      Disjunction(Byte('a'), EmptySet()));
   EXPECT_NORMALISED(
       Complement(EmptySet()),
-      Disjunction(Character('a'), Complement(EmptySet())));
+      Disjunction(Byte('a'), Complement(EmptySet())));
 }
 
 #define EXPECT_ISNULLABLE(expected, exp) \
@@ -251,52 +254,52 @@ TEST(IsNullable, EmptyString) {
       EmptyString());
 }
 
-TEST(IsNullable, AnyCharacter) {
+TEST(IsNullable, AnyByte) {
   EXPECT_ISNULLABLE(
       false,
-      AnyCharacter());
+      AnyByte());
 }
 
-TEST(IsNullable, Character) {
+TEST(IsNullable, Byte) {
   EXPECT_ISNULLABLE(
       false,
-      Character('a'));
+      Byte('a'));
 }
 
-TEST(IsNullable, CharacterClass) {
+TEST(IsNullable, ByteRange) {
   EXPECT_ISNULLABLE(
       false,
-      CharacterClass({'a', 'b', 'c'}));
+      ByteRange({'a', 'c'}));
 }
 
 TEST(IsNullable, KleeneClosure) {
   EXPECT_ISNULLABLE(
       true,
-      KleeneClosure(Character('a')));
+      KleeneClosure(Byte('a')));
 }
 
 TEST(IsNullable, Concatenation) {
   EXPECT_ISNULLABLE(
       false,
-      Concatenation(Character('a'), Character('b')));
+      Concatenation(Byte('a'), Byte('b')));
 }
 
 TEST(IsNullable, Complement) {
   EXPECT_ISNULLABLE(
       true,
-      Complement(Character('a')));
+      Complement(Byte('a')));
 }
 
 TEST(IsNullable, Conjunction) {
   EXPECT_ISNULLABLE(
       false,
-      Conjunction(Character('a'), Character('b')));
+      Conjunction(Byte('a'), Byte('b')));
 }
 
 TEST(IsNullable, Disjunction) {
   EXPECT_ISNULLABLE(
       false,
-      Disjunction(Character('a'), Character('b')));
+      Disjunction(Byte('a'), Byte('b')));
 }
 
 #define EXPECT_DERIVATIVE(expected, exp)                   \
@@ -316,142 +319,152 @@ TEST(Derivative, EmptyString) {
       EmptyString());
 }
 
-TEST(Derivative, AnyCharacter) {
+TEST(Derivative, AnyByte) {
   EXPECT_DERIVATIVE(
       EmptyString(),
-      AnyCharacter());
+      AnyByte());
 }
 
-TEST(Derivative, Character) {
+TEST(Derivative, Byte) {
   EXPECT_DERIVATIVE(
       EmptyString(),
-      Character('a'));
+      Byte('a'));
   EXPECT_DERIVATIVE(
       EmptySet(),
-      Character('b'));
+      Byte('b'));
 }
 
-TEST(Derivative, CharacterClass) {
+TEST(Derivative, ByteRange) {
   EXPECT_DERIVATIVE(
       EmptyString(),
-      CharacterClass({'a', 'b', 'c'}));
+      ByteRange({'a', 'c'}));
   EXPECT_DERIVATIVE(
       EmptySet(),
-      CharacterClass({'b', 'c', 'd'}));
+      ByteRange({'b', 'd'}));
 }
 
 TEST(Derivative, KleeneClosure) {
   EXPECT_DERIVATIVE(
-      KleeneClosure(Character('a')),
-      KleeneClosure(Character('a')));
+      KleeneClosure(Byte('a')),
+      KleeneClosure(Byte('a')));
 }
 
 TEST(Derivative, Concatenation) {
   EXPECT_DERIVATIVE(
-      Character('b'),
-      Concatenation(Character('a'), Character('b')));
+      Byte('b'),
+      Concatenation(Byte('a'), Byte('b')));
   EXPECT_DERIVATIVE(
-      Concatenation(KleeneClosure(Character('a')), Character('b')),
-      Concatenation(KleeneClosure(Character('a')), Character('b')));
+      Concatenation(KleeneClosure(Byte('a')), Byte('b')),
+      Concatenation(KleeneClosure(Byte('a')), Byte('b')));
 }
 
 TEST(Derivative, Complement) {
   EXPECT_DERIVATIVE(
       Complement(EmptyString()),
-      Complement(Character('a')));
+      Complement(Byte('a')));
 }
 
 TEST(Derivative, Conjunction) {
   EXPECT_DERIVATIVE(
       EmptySet(),
-      Conjunction(Character('a'), Character('b')));
+      Conjunction(Byte('a'), Byte('b')));
 }
 
 TEST(Derivative, Disjunction) {
   EXPECT_DERIVATIVE(
       EmptyString(),
-      Disjunction(Character('a'), Character('b')));
+      Disjunction(Byte('a'), Byte('b')));
 }
 
 #define EXPECT_PARTITIONS(expected, exp) \
   do {                                   \
-    list<set<Rune>> partitions;          \
+    list<bitset<256>> partitions;        \
     Partitions(exp, &partitions);        \
     EXPECT_EQ(expected, partitions);     \
   } while (0)
 
+template <typename... Variadic>
+inline bitset<256> BitSet(Variadic... bits) {
+  set<int> s({bits...});
+  bitset<256> bs;
+  for (int bit : s) {
+    bs.set(bit);
+  }
+  return bs;
+}
+
 TEST(Partitions, EmptySet) {
   EXPECT_PARTITIONS(
-      list<set<Rune>>({set<Rune>({})}),
+      list<bitset<256>>({BitSet()}),
       EmptySet());
 }
 
 TEST(Partitions, EmptyString) {
   EXPECT_PARTITIONS(
-      list<set<Rune>>({set<Rune>({})}),
+      list<bitset<256>>({BitSet()}),
       EmptyString());
 }
 
-TEST(Partitions, AnyCharacter) {
+TEST(Partitions, AnyByte) {
   EXPECT_PARTITIONS(
-      list<set<Rune>>({set<Rune>({})}),
-      AnyCharacter());
+      list<bitset<256>>({BitSet()}),
+      AnyByte());
 }
 
-TEST(Partitions, Character) {
+TEST(Partitions, Byte) {
   EXPECT_PARTITIONS(
-      list<set<Rune>>({set<Rune>({'a'}),
-                       set<Rune>({'a'})}),
-      Character('a'));
+      list<bitset<256>>({BitSet('a'),
+                         BitSet('a')}),
+      Byte('a'));
 }
 
-TEST(Partitions, CharacterClass) {
+TEST(Partitions, ByteRange) {
   EXPECT_PARTITIONS(
-      list<set<Rune>>({set<Rune>({'a', 'b', 'c'}),
-                       set<Rune>({'a', 'b', 'c'})}),
-      CharacterClass({'a', 'b', 'c'}));
+      list<bitset<256>>({BitSet('a', 'b', 'c'),
+                         BitSet('a', 'b', 'c')}),
+      ByteRange({'a', 'c'}));
 }
 
 TEST(Partitions, KleeneClosure) {
   EXPECT_PARTITIONS(
-      list<set<Rune>>({set<Rune>({'a'}),
-                       set<Rune>({'a'})}),
-      KleeneClosure(Character('a')));
+      list<bitset<256>>({BitSet('a'),
+                         BitSet('a')}),
+      KleeneClosure(Byte('a')));
 }
 
 TEST(Partitions, Concatenation) {
   EXPECT_PARTITIONS(
-      list<set<Rune>>({set<Rune>({'a'}),
-                       set<Rune>({'a'})}),
-      Concatenation(Character('a'), Character('b')));
+      list<bitset<256>>({BitSet('a'),
+                         BitSet('a')}),
+      Concatenation(Byte('a'), Byte('b')));
   EXPECT_PARTITIONS(
-      list<set<Rune>>({set<Rune>({'a', 'b'}),
-                       set<Rune>({'b'}),
-                       set<Rune>({'a'})}),
-      Concatenation(KleeneClosure(Character('a')), Character('b')));
+      list<bitset<256>>({BitSet('a', 'b'),
+                         BitSet('b'),
+                         BitSet('a')}),
+      Concatenation(KleeneClosure(Byte('a')), Byte('b')));
 }
 
 TEST(Partitions, Complement) {
   EXPECT_PARTITIONS(
-      list<set<Rune>>({set<Rune>({'a'}),
-                       set<Rune>({'a'})}),
-      Complement(Character('a')));
+      list<bitset<256>>({BitSet('a'),
+                         BitSet('a')}),
+      Complement(Byte('a')));
 }
 
 TEST(Partitions, Conjunction) {
   EXPECT_PARTITIONS(
-      list<set<Rune>>({set<Rune>({'a', 'b'}),
-                       set<Rune>({'b'}),
-                       set<Rune>({'a'})}),
-      Conjunction(Character('a'), Character('b')));
+      list<bitset<256>>({BitSet('a', 'b'),
+                         BitSet('b'),
+                         BitSet('a')}),
+      Conjunction(Byte('a'), Byte('b')));
 }
 
 TEST(Partitions, Disjunction) {
   EXPECT_PARTITIONS(
-      list<set<Rune>>({set<Rune>({'a', 'b'}),
-                       set<Rune>({'b'}),
-                       set<Rune>({'a'})}),
-      Disjunction(Character('a'), Character('b')));
+      list<bitset<256>>({BitSet('a', 'b'),
+                         BitSet('b'),
+                         BitSet('a')}),
+      Disjunction(Byte('a'), Byte('b')));
 }
 
 #define EXPECT_PARSE(expected, str) \
@@ -461,150 +474,220 @@ TEST(Partitions, Disjunction) {
     EXPECT_EQ(expected, exp);       \
   } while (0)
 
+TEST(Parse, EscapeSequences) {
+  EXPECT_PARSE(
+      AnyByte(),
+      "\\C");
+  EXPECT_PARSE(
+      Concatenation(
+          Character('\f'),
+          Character('\n'),
+          Character('\r'),
+          Character('\t')),
+      "\\f\\n\\r\\t");
+}
+
 TEST(Parse, AnyCharacter) {
   EXPECT_PARSE(
-      AnyCharacter(),
+      Disjunction(
+          ByteRange({0x00, 0x7F}),
+          Concatenation(
+              ByteRange({0xC0, 0xDF}),
+              ByteRange({0x80, 0xBF})),
+          Concatenation(
+              ByteRange({0xE0, 0xEF}),
+              ByteRange({0x80, 0xBF}),
+              ByteRange({0x80, 0xBF})),
+          Concatenation(
+              ByteRange({0xF0, 0xF7}),
+              ByteRange({0x80, 0xBF}),
+              ByteRange({0x80, 0xBF}),
+              ByteRange({0x80, 0xBF}))),
       ".");
 }
 
 TEST(Parse, Character) {
   EXPECT_PARSE(
-      Character('a'),
+      Byte(0x61),
       "a");
+  EXPECT_PARSE(
+      Concatenation(
+          Byte(0xC2),
+          Byte(0xAC)),
+      "¬");
+  EXPECT_PARSE(
+      Concatenation(
+          Byte(0xE5),
+          Byte(0x85),
+          Byte(0x94)),
+      "兔");
+  EXPECT_PARSE(
+      Concatenation(
+          Byte(0xF0),
+          Byte(0x9F),
+          Byte(0x92),
+          Byte(0xA9)),
+      "💩");
 }
 
 TEST(Parse, CharacterClass) {
   EXPECT_PARSE(
-      CharacterClass({'a', 'b', 'c'}),
-      "[abc]");
+      Disjunction(
+          Byte(0x61),
+          Concatenation(
+              Byte(0xC2),
+              Byte(0xAC)),
+          Concatenation(
+              Byte(0xE5),
+              Byte(0x85),
+              Byte(0x94)),
+          Concatenation(
+              Byte(0xF0),
+              Byte(0x9F),
+              Byte(0x92),
+              Byte(0xA9))),
+      "[a¬兔💩]");
   EXPECT_PARSE(
       Conjunction(
           Complement(
-              CharacterClass({'a', 'b', 'c'})),
+              Disjunction(
+                  Byte(0x61),
+                  Concatenation(
+                      Byte(0xC2),
+                      Byte(0xAC)),
+                  Concatenation(
+                      Byte(0xE5),
+                      Byte(0x85),
+                      Byte(0x94)),
+                  Concatenation(
+                      Byte(0xF0),
+                      Byte(0x9F),
+                      Byte(0x92),
+                      Byte(0xA9)))),
           AnyCharacter()),
-      "[^abc]");
+      "[^a¬兔💩]");
 }
 
 TEST(Parse, KleeneClosure) {
   EXPECT_PARSE(
       KleeneClosure(
-          Character('a')),
+          Byte('a')),
       "a*");
   EXPECT_PARSE(
       KleeneClosure(
           KleeneClosure(
-              Character('a'))),
+              Byte('a'))),
       "a**");
   EXPECT_PARSE(
       Concatenation(
-          Character('a'),
+          Byte('a'),
           KleeneClosure(
-              Character('b'))),
+              Byte('b'))),
       "ab*");
   EXPECT_PARSE(
       KleeneClosure(
           Concatenation(
-              Character('a'),
-              Character('b'))),
+              Byte('a'),
+              Byte('b'))),
       "(ab)*");
   EXPECT_PARSE(
       Concatenation(
           KleeneClosure(
-              Character('a')),
-          Character('b')),
+              Byte('a')),
+          Byte('b')),
       "a*b");
   EXPECT_PARSE(
       Concatenation(
           KleeneClosure(
-              Character('a')),
+              Byte('a')),
           Concatenation(
               KleeneClosure(
-                  Character('b')),
-              Character('c'))),
+                  Byte('b')),
+              Byte('c'))),
       "a*b*c");
 }
 
 TEST(Parse, Concatenation) {
   EXPECT_PARSE(
       Concatenation(
-          Character('a'),
-          Character('b')),
+          Byte('a'),
+          Byte('b')),
       "ab");
   EXPECT_PARSE(
       Concatenation(
-          Character('a'),
+          Byte('a'),
           Concatenation(
-              Character('b'),
-              Character('c'))),
+              Byte('b'),
+              Byte('c'))),
       "abc");
 }
 
 TEST(Parse, Complement) {
   EXPECT_PARSE(
       Complement(
-          Character('a')),
+          Byte('a')),
       "!a");
   EXPECT_PARSE(
       Complement(
           Complement(
-              Character('a'))),
+              Byte('a'))),
       "!!a");
   EXPECT_PARSE(
       Complement(
           Concatenation(
-              Character('a'),
-              Character('b'))),
+              Byte('a'),
+              Byte('b'))),
       "!ab");
   EXPECT_PARSE(
       Complement(
           Concatenation(
-              Character('a'),
-              Character('b'))),
+              Byte('a'),
+              Byte('b'))),
       "!(ab)");
   EXPECT_PARSE(
       Concatenation(
-          Character('a'),
+          Byte('a'),
           Complement(
-              Character('b'))),
+              Byte('b'))),
       "a!b");
   EXPECT_PARSE(
       Concatenation(
           Concatenation(
-              Character('a'),
+              Byte('a'),
               Complement(
-                  Character('b'))),
+                  Byte('b'))),
           Complement(
-              Character('c'))),
+              Byte('c'))),
       "a!b!c");
 }
 
 TEST(Parse, Conjunction) {
   EXPECT_PARSE(
       Conjunction(
-          Character('a'),
-          Character('b')),
+          Byte('a'),
+          Byte('b')),
       "a&b");
   EXPECT_PARSE(
       Conjunction(
           Conjunction(
-              Character('a'),
-              Character('b')),
-          Character('c')),
+              Byte('a'),
+              Byte('b')),
+          Byte('c')),
       "a&b&c");
 }
 
 TEST(Parse, Disjunction) {
   EXPECT_PARSE(
       Disjunction(
-          Character('a'),
-          Character('b')),
+          Byte('a'),
+          Byte('b')),
       "a|b");
   EXPECT_PARSE(
       Disjunction(
           Disjunction(
-              Character('a'),
-              Character('b')),
-          Character('c')),
+              Byte('a'),
+              Byte('b')),
+          Byte('c')),
       "a|b|c");
 }
 
@@ -613,17 +696,21 @@ TEST(Parse, Disjunction) {
     if (expected) {                  \
       EXPECT_TRUE(Match(exp, str));  \
       EXPECT_TRUE(Match(dfa, str));  \
+      EXPECT_TRUE(Match(fun, str));  \
     } else {                         \
       EXPECT_FALSE(Match(exp, str)); \
       EXPECT_FALSE(Match(dfa, str)); \
+      EXPECT_FALSE(Match(fun, str)); \
     }                                \
   } while (0)
 
 TEST(Match, EmptySet) {
   Exp exp;
   DFA dfa;
+  Fun fun;
   exp = EmptySet();
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(false, "");
   EXPECT_MATCH(false, "a");
 }
@@ -631,61 +718,118 @@ TEST(Match, EmptySet) {
 TEST(Match, EmptyString) {
   Exp exp;
   DFA dfa;
+  Fun fun;
   exp = EmptyString();
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(true, "");
   EXPECT_MATCH(false, "a");
+}
+
+TEST(Match, EscapeSequences) {
+  Exp exp;
+  DFA dfa;
+  Fun fun;
+  ASSERT_TRUE(Parse("\\C", &exp));
+  Compile(exp, &dfa);
+  Compile(dfa, &fun);
+  EXPECT_MATCH(false, "");
+  EXPECT_MATCH(true, "a");
+  ASSERT_TRUE(Parse("\\f\\n\\r\\t", &exp));
+  Compile(exp, &dfa);
+  Compile(dfa, &fun);
+  EXPECT_MATCH(false, "fnrt");
+  EXPECT_MATCH(true, "\f\n\r\t");
+  EXPECT_MATCH(false, "\\f\\n\\r\\t");
 }
 
 TEST(Match, AnyCharacter) {
   Exp exp;
   DFA dfa;
+  Fun fun;
   ASSERT_TRUE(Parse(".", &exp));
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(false, "");
   EXPECT_MATCH(true, "a");
+  EXPECT_MATCH(true, "¬");
+  EXPECT_MATCH(true, "兔");
+  EXPECT_MATCH(true, "💩");
 }
 
 TEST(Match, Character) {
   Exp exp;
   DFA dfa;
+  Fun fun;
   ASSERT_TRUE(Parse("a", &exp));
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(false, "");
   EXPECT_MATCH(true, "a");
+  EXPECT_MATCH(false, "X");
+  ASSERT_TRUE(Parse("¬", &exp));
+  Compile(exp, &dfa);
+  Compile(dfa, &fun);
+  EXPECT_MATCH(false, "");
+  EXPECT_MATCH(true, "¬");
+  EXPECT_MATCH(false, "X");
+  ASSERT_TRUE(Parse("兔", &exp));
+  Compile(exp, &dfa);
+  Compile(dfa, &fun);
+  EXPECT_MATCH(false, "");
+  EXPECT_MATCH(true, "兔");
+  EXPECT_MATCH(false, "X");
+  ASSERT_TRUE(Parse("💩", &exp));
+  Compile(exp, &dfa);
+  Compile(dfa, &fun);
+  EXPECT_MATCH(false, "");
+  EXPECT_MATCH(true, "💩");
   EXPECT_MATCH(false, "X");
 }
 
 TEST(Match, CharacterClass) {
   Exp exp;
   DFA dfa;
-  ASSERT_TRUE(Parse("[abc]", &exp));
+  Fun fun;
+  ASSERT_TRUE(Parse("[a¬兔💩]", &exp));
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(false, "");
   EXPECT_MATCH(true, "a");
+  EXPECT_MATCH(true, "¬");
+  EXPECT_MATCH(true, "兔");
+  EXPECT_MATCH(true, "💩");
   EXPECT_MATCH(false, "X");
-  ASSERT_TRUE(Parse("[^abc]", &exp));
+  ASSERT_TRUE(Parse("[^a¬兔💩]", &exp));
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(false, "");
   EXPECT_MATCH(false, "a");
+  EXPECT_MATCH(false, "¬");
+  EXPECT_MATCH(false, "兔");
+  EXPECT_MATCH(false, "💩");
   EXPECT_MATCH(true, "X");
 }
 
 TEST(Match, KleeneClosure) {
   Exp exp;
   DFA dfa;
+  Fun fun;
   ASSERT_TRUE(Parse("a*", &exp));
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(true, "");
   EXPECT_MATCH(true, "a");
   EXPECT_MATCH(true, "aa");
   ASSERT_TRUE(Parse("a+", &exp));
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(false, "");
   EXPECT_MATCH(true, "a");
   EXPECT_MATCH(true, "aa");
   ASSERT_TRUE(Parse("a?", &exp));
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(true, "");
   EXPECT_MATCH(true, "a");
   EXPECT_MATCH(false, "aa");
@@ -694,8 +838,10 @@ TEST(Match, KleeneClosure) {
 TEST(Match, Concatenation) {
   Exp exp;
   DFA dfa;
+  Fun fun;
   ASSERT_TRUE(Parse("aa", &exp));
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(false, "");
   EXPECT_MATCH(false, "a");
   EXPECT_MATCH(true, "aa");
@@ -705,8 +851,10 @@ TEST(Match, Concatenation) {
 TEST(Match, Complement) {
   Exp exp;
   DFA dfa;
+  Fun fun;
   ASSERT_TRUE(Parse("!a", &exp));
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(true, "");
   EXPECT_MATCH(false, "a");
   EXPECT_MATCH(true, "aa");
@@ -715,8 +863,10 @@ TEST(Match, Complement) {
 TEST(Match, Conjunction) {
   Exp exp;
   DFA dfa;
+  Fun fun;
   ASSERT_TRUE(Parse("a.&.b", &exp));
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(false, "aa");
   EXPECT_MATCH(true, "ab");
   EXPECT_MATCH(false, "ba");
@@ -726,8 +876,10 @@ TEST(Match, Conjunction) {
 TEST(Match, Disjunction) {
   Exp exp;
   DFA dfa;
+  Fun fun;
   ASSERT_TRUE(Parse("a.|.b", &exp));
   Compile(exp, &dfa);
+  Compile(dfa, &fun);
   EXPECT_MATCH(true, "aa");
   EXPECT_MATCH(true, "ab");
   EXPECT_MATCH(false, "ba");

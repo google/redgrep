@@ -14,7 +14,7 @@
 
 YACC :=		bison
 CC :=		gcc
-CFLAGS :=	-Wall -Wextra
+CFLAGS :=	-Wall -Wextra -funsigned-char
 CXX :=		g++
 CXXFLAGS :=	-std=c++0x $(CFLAGS)
 CPPFLAGS :=	-I.
@@ -28,7 +28,7 @@ LDLIBS +=	$(shell $(LLVM_CONFIG) --ldflags) \
 		-lLLVM-$(shell $(LLVM_CONFIG) --version)
 
 .PHONY: all
-all: utf gtest regexp_test reddot
+all: utf gtest regexp_test reddot redasm
 
 utf:
 	wget -m -np -q https://go.googlecode.com/hg/src/lib9/utf/
@@ -49,8 +49,10 @@ regexp_test: regexp_test.o $(UTF) parser.tab.o regexp.o $(GTEST)
 
 reddot: reddot.o $(UTF) parser.tab.o regexp.o
 
+redasm: redasm.o $(UTF) parser.tab.o regexp.o
+
 .PHONY: clean
 clean:
 	$(RM) parser.tab.cc parser.tab.hh location.hh position.hh stack.hh
 	$(RM) *.o utf/*.o gtest/*.o
-	$(RM) regexp_test reddot
+	$(RM) regexp_test reddot redasm

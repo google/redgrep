@@ -15,8 +15,17 @@
 #include <err.h>
 #include <stdio.h>
 
+#include <list>
+#include <map>
+#include <utility>
+
 #include "regexp.h"
-#include "utf/utf.h"
+
+using std::list;
+using std::make_pair;
+using std::map;
+using std::pair;
+
 
 static void EmitHeader() {
   printf("digraph reddot {\n");
@@ -30,20 +39,19 @@ static void EmitState(int curr, bool accepting) {
   printf("\n");
 }
 
-static void EmitTransition(int curr, Rune character, int next) {
-  char buf[UTFmax];
-  int len;
-  if (character == redgrep::InvalidRune()) {
-    len = 0;
+static void EmitTransition(int curr, int byte, int next) {
+  printf("s%d -> s%d [label=\"", curr, next);
+  if (byte == -1) {
+    printf("\" style=dashed]");
   } else {
-    len = runetochar(buf, &character);
+    printf("%02X\"]", byte);
   }
-  printf("s%d -> s%d [label=\"%.*s\"", curr, next, len, buf);
-  if (character == redgrep::InvalidRune()) {
-    printf(" style=dashed]");
-  } else {
-    printf("]");
-  }
+  printf("\n");
+}
+
+static void EmitTransition(int curr, int begin, int end, int next) {
+  printf("s%d -> s%d [label=\"", curr, next);
+  printf("%02X-%02X\"]", begin, end);
   printf("\n");
 }
 
@@ -61,18 +69,43 @@ int main(int argc, char** argv) {
     errx(1, "parse error");
   }
   redgrep::DFA dfa;
-  int states = redgrep::Compile(exp, &dfa);
+  int nstates = redgrep::Compile(exp, &dfa);
   EmitHeader();
-  for (int i = 0; i < states; ++i) {
+  for (int i = 0; i < nstates; ++i) {
     int curr = i;
     bool accepting = dfa.accepting_.find(curr)->second;
     EmitState(curr, accepting);
   }
+  map<pair<int, int>, list<pair<int, int>>> transition_map;
   for (const auto& i : dfa.transition_) {
     int curr = i.first.first;
-    Rune character = i.first.second;
+    int byte = i.first.second;
     int next = i.second;
-    EmitTransition(curr, character, next);
+    if (byte == -1) {
+      EmitTransition(curr, byte, next);
+    } else {
+      auto& range_list = transition_map[make_pair(curr, next)];
+      if (range_list.empty() ||
+          range_list.back().second + 1 != byte) {
+        range_list.push_back(make_pair(byte, byte));
+      } else {
+        range_list.back().second = byte;
+      }
+    }
+  }
+  for (const auto& i : transition_map) {
+    int curr = i.first.first;
+    int next = i.first.second;
+    const auto& range_list = i.second;
+    for (const auto& j : range_list) {
+      int begin = j.first;
+      int end = j.second;
+      if (begin == end) {
+        EmitTransition(curr, begin, next);
+      } else {
+        EmitTransition(curr, begin, end, next);
+      }
+    }
   }
   EmitFooter();
   return 0;
