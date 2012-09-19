@@ -15,6 +15,7 @@
 #ifndef REDGREP_REGEXP_H_
 #define REDGREP_REGEXP_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <bitset>

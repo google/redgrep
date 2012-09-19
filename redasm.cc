@@ -13,6 +13,8 @@
 // limitations under the License.
 
 #include <err.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "llvm-c/Disassembler.h"

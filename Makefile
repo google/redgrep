@@ -28,7 +28,7 @@ LDLIBS +=	$(shell $(LLVM_CONFIG) --ldflags) \
 		-lLLVM-$(shell $(LLVM_CONFIG) --version)
 
 .PHONY: all
-all: utf gtest regexp_test reddot redasm
+all: utf gtest regexp_test reddot redasm redgrep
 
 utf:
 	wget -m -np -q https://go.googlecode.com/hg/src/lib9/utf/
@@ -51,8 +51,10 @@ reddot: reddot.o $(UTF) parser.tab.o regexp.o
 
 redasm: redasm.o $(UTF) parser.tab.o regexp.o
 
+redgrep: redgrep_main.o $(UTF) parser.tab.o regexp.o redgrep.o
+
 .PHONY: clean
 clean:
 	$(RM) parser.tab.cc parser.tab.hh location.hh position.hh stack.hh
 	$(RM) *.o utf/*.o gtest/*.o
-	$(RM) regexp_test reddot redasm
+	$(RM) regexp_test reddot redasm redgrep
