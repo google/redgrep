@@ -15,7 +15,6 @@
 #include "regexp.h"
 
 #include <pthread.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -29,6 +28,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BasicBlock.h"
 #include "llvm/Constants.h"
+#include "llvm/DataLayout.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JIT.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
@@ -43,7 +43,6 @@
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/MutexGuard.h"
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/Target/TargetData.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/TypeBuilder.h"
 #include "parser.tab.hh"
@@ -58,7 +57,6 @@ using std::map;
 using std::pair;
 using std::set;
 using std::vector;
-
 
 Expression::Expression(Kind kind)
     : kind_(kind),
@@ -178,8 +176,8 @@ int Compare(Exp x, Exp y) {
   abort();
 }
 
-// TODO(junyer): EmptySet, EmptyString, AnyByte and AnyCharacter expressions
-// could be singletons.
+// TODO(junyer): EmptySet, EmptyString, AnyByte, Byte and AnyCharacter
+// expressions could be singletons.
 
 Exp EmptySet() {
   Exp exp(new Expression(kEmptySet));
@@ -232,11 +230,11 @@ Exp Disjunction(const list<Exp>& subexpressions, bool norm) {
 }
 
 Exp AnyCharacter() {
-  Exp b1 = ByteRange(make_pair(0x00, 0x7F));  // 0xxxxxxx
-  Exp bx = ByteRange(make_pair(0x80, 0xBF));  // 10xxxxxx
-  Exp b2 = ByteRange(make_pair(0xC0, 0xDF));  // 110xxxxx
-  Exp b3 = ByteRange(make_pair(0xE0, 0xEF));  // 1110xxxx
-  Exp b4 = ByteRange(make_pair(0xF0, 0xF7));  // 11110xxx
+  Exp b1 = ByteRange(0x00, 0x7F);  // 0xxxxxxx
+  Exp bx = ByteRange(0x80, 0xBF);  // 10xxxxxx
+  Exp b2 = ByteRange(0xC0, 0xDF);  // 110xxxxx
+  Exp b3 = ByteRange(0xE0, 0xEF);  // 1110xxxx
+  Exp b4 = ByteRange(0xF0, 0xF7);  // 11110xxx
   return Disjunction(b1,
                      Concatenation(b2, bx),
                      Concatenation(b3, bx, bx),
@@ -362,7 +360,7 @@ Exp Normalised(Exp exp) {
           return sub;
         }
         // (r & s) & t ≈ r & (s & t)
-        if (sub->kind() == exp->kind()) {
+        if (sub->kind() == kConjunction) {
           list<Exp> copy = sub->subexpressions();
           subs.splice(subs.end(), copy);
         } else {
@@ -397,7 +395,7 @@ Exp Normalised(Exp exp) {
           return sub;
         }
         // (r + s) + t ≈ r + (s + t)
-        if (sub->kind() == exp->kind()) {
+        if (sub->kind() == kDisjunction) {
           list<Exp> copy = sub->subexpressions();
           subs.splice(subs.end(), copy);
         } else {
@@ -434,7 +432,7 @@ bool IsNullable(Exp exp) {
       return true;
 
     case kAnyByte:
-      // ν(.) = ∅
+      // ν(\C) = ∅
       return false;
 
     case kByte:
@@ -493,7 +491,7 @@ Exp Derivative(Exp exp, int byte) {
       return EmptySet();
 
     case kAnyByte:
-      // ∂a. = ε
+      // ∂a\C = ε
       return EmptyString();
 
     case kByte:
@@ -621,7 +619,7 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
       return;
 
     case kAnyByte:
-      // C(.) = {Σ}
+      // C(\C) = {Σ}
       partitions->push_back({});
       return;
 
@@ -703,14 +701,15 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
 }
 
 bool Parse(llvm::StringRef str, Exp* exp) {
-  redgrep_yy::parser parser(&str, exp);
+  redgrep_yy::Data yydata(str, exp);
+  redgrep_yy::parser parser(&yydata);
   return parser.parse() == 0;
 }
 
 bool Match(Exp exp, llvm::StringRef str) {
   while (!str.empty()) {
     int byte = str[0];
-    str = str.substr(1);
+    str = str.drop_front(1);
     Exp der = Derivative(exp, byte);
     der = Normalised(der);
     exp = der;
@@ -773,7 +772,7 @@ bool Match(const DFA& dfa, llvm::StringRef str) {
   int curr = 0;
   while (!str.empty()) {
     int byte = str[0];
-    str = str.substr(1);
+    str = str.drop_front(1);
     auto transition = dfa.transition_.find(make_pair(curr, byte));
     if (transition == dfa.transition_.end()) {
       // Get the "default" transition.
@@ -819,7 +818,7 @@ static void LLVMOnce() {
   llvm->module_ = new llvm::Module("M", *llvm->context_);
   llvm->engine_ = llvm::EngineBuilder(llvm->module_).create();
   llvm->passes_ = new llvm::FunctionPassManager(llvm->module_);
-  llvm->passes_->add(new llvm::TargetData(*llvm->engine_->getTargetData()));
+  llvm->passes_->add(new llvm::DataLayout(*llvm->engine_->getDataLayout()));
   llvm->passes_->add(llvm::createCodeGenPreparePass());
   llvm->passes_->add(llvm::createPromoteMemoryToRegisterPass());
   llvm->passes_->add(llvm::createLoopDeletionPass());
@@ -932,7 +931,8 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
 class DiscoverMachineCodeSize : public llvm::JITEventListener {
  public:
   explicit DiscoverMachineCodeSize(Fun* fun)
-      : llvm::JITEventListener(), fun_(fun) {}
+      : llvm::JITEventListener(),
+        fun_(fun) {}
   virtual ~DiscoverMachineCodeSize() {}
 
   virtual void NotifyFunctionEmitted(const llvm::Function&,
@@ -945,6 +945,10 @@ class DiscoverMachineCodeSize : public llvm::JITEventListener {
 
  private:
   Fun* fun_;
+
+  //DISALLOW_COPY_AND_ASSIGN(DiscoverMachineCodeSize);
+  DiscoverMachineCodeSize(const DiscoverMachineCodeSize&) = delete;
+  void operator=(const DiscoverMachineCodeSize&) = delete;
 };
 
 // Generates the machine code for the function.

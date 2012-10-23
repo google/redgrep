@@ -46,11 +46,11 @@ TEST(Compare, Byte) {
 
 TEST(Compare, ByteRange) {
   EXPECT_EQ(
-      ByteRange({'a', 'c'}),
-      ByteRange({'a', 'c'}));
+      ByteRange('a', 'c'),
+      ByteRange('a', 'c'));
   EXPECT_LT(
-      ByteRange({'a', 'c'}),
-      ByteRange({'b', 'd'}));
+      ByteRange('a', 'c'),
+      ByteRange('b', 'd'));
 }
 
 TEST(Compare, KleeneClosure) {
@@ -129,8 +129,8 @@ TEST(Normalised, Byte) {
 
 TEST(Normalised, ByteRange) {
   EXPECT_NORMALISED(
-      ByteRange({'a', 'c'}),
-      ByteRange({'a', 'c'}));
+      ByteRange('a', 'c'),
+      ByteRange('a', 'c'));
 }
 
 TEST(Normalised, KleeneClosure) {
@@ -269,7 +269,7 @@ TEST(IsNullable, Byte) {
 TEST(IsNullable, ByteRange) {
   EXPECT_ISNULLABLE(
       false,
-      ByteRange({'a', 'c'}));
+      ByteRange('a', 'c'));
 }
 
 TEST(IsNullable, KleeneClosure) {
@@ -337,10 +337,10 @@ TEST(Derivative, Byte) {
 TEST(Derivative, ByteRange) {
   EXPECT_DERIVATIVE(
       EmptyString(),
-      ByteRange({'a', 'c'}));
+      ByteRange('a', 'c'));
   EXPECT_DERIVATIVE(
       EmptySet(),
-      ByteRange({'b', 'd'}));
+      ByteRange('b', 'd'));
 }
 
 TEST(Derivative, KleeneClosure) {
@@ -422,7 +422,7 @@ TEST(Partitions, ByteRange) {
   EXPECT_PARTITIONS(
       list<bitset<256>>({BitSet('a', 'b', 'c'),
                          BitSet('a', 'b', 'c')}),
-      ByteRange({'a', 'c'}));
+      ByteRange('a', 'c'));
 }
 
 TEST(Partitions, KleeneClosure) {
@@ -480,29 +480,29 @@ TEST(Parse, EscapeSequences) {
       "\\C");
   EXPECT_PARSE(
       Concatenation(
-          Character('\f'),
-          Character('\n'),
-          Character('\r'),
-          Character('\t')),
+          Byte('\f'),
+          Byte('\n'),
+          Byte('\r'),
+          Byte('\t')),
       "\\f\\n\\r\\t");
 }
 
 TEST(Parse, AnyCharacter) {
   EXPECT_PARSE(
       Disjunction(
-          ByteRange({0x00, 0x7F}),
+          ByteRange(0x00, 0x7F),
           Concatenation(
-              ByteRange({0xC0, 0xDF}),
-              ByteRange({0x80, 0xBF})),
+              ByteRange(0xC0, 0xDF),
+              ByteRange(0x80, 0xBF)),
           Concatenation(
-              ByteRange({0xE0, 0xEF}),
-              ByteRange({0x80, 0xBF}),
-              ByteRange({0x80, 0xBF})),
+              ByteRange(0xE0, 0xEF),
+              ByteRange(0x80, 0xBF),
+              ByteRange(0x80, 0xBF)),
           Concatenation(
-              ByteRange({0xF0, 0xF7}),
-              ByteRange({0x80, 0xBF}),
-              ByteRange({0x80, 0xBF}),
-              ByteRange({0x80, 0xBF}))),
+              ByteRange(0xF0, 0xF7),
+              ByteRange(0x80, 0xBF),
+              ByteRange(0x80, 0xBF),
+              ByteRange(0x80, 0xBF))),
       ".");
 }
 

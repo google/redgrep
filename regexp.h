@@ -37,10 +37,10 @@ namespace redgrep {
 
 using std::bitset;
 using std::list;
+using std::make_pair;
 using std::map;
 using std::pair;
 using std::set;
-
 
 // Implements regular expressions using Brzozowski derivatives.
 //
@@ -155,12 +155,15 @@ Exp EmptyString();
 Exp AnyByte();
 Exp Byte(int byte);
 Exp ByteRange(const pair<int, int>& byte_range);
-
 Exp KleeneClosure(const list<Exp>& subexpressions, bool norm);
 Exp Concatenation(const list<Exp>& subexpressions, bool norm);
 Exp Complement(const list<Exp>& subexpressions, bool norm);
 Exp Conjunction(const list<Exp>& subexpressions, bool norm);
 Exp Disjunction(const list<Exp>& subexpressions, bool norm);
+
+inline Exp ByteRange(int min, int max) {
+  return ByteRange(make_pair(min, max));
+}
 
 inline Exp KleeneClosure(Exp x) {
   return KleeneClosure({x}, false);

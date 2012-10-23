@@ -30,14 +30,34 @@ class location;
 #define YYSTYPE redgrep::Exp
 #define YYLTYPE redgrep_yy::location
 
-int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, llvm::StringRef* input);
+namespace redgrep_yy {
+
+class Data {
+ public:
+  Data(llvm::StringRef str, redgrep::Exp* exp)
+      : input_(str),
+        output_(exp) {}
+  virtual ~Data() {}
+
+  llvm::StringRef input_;
+  redgrep::Exp* output_;
+
+ private:
+  //DISALLOW_COPY_AND_ASSIGN(Data);
+  Data(const Data&) = delete;
+  void operator=(const Data&) = delete;
+};
+
+}  // namespace redgrep_yy
+
+#define YYDATA redgrep_yy::Data
+
+int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata);
 
 %}
 
-%lex-param { llvm::StringRef* input }
-
-%parse-param { llvm::StringRef* input }
-%parse-param { redgrep::Exp* output }
+%lex-param   { YYDATA* yydata }
+%parse-param { YYDATA* yydata }
 
 %left DISJUNCTION
 %left CONJUNCTION
@@ -52,7 +72,7 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, llvm::StringRef* input);
 
 start:
   expression
-  { *output = $1; }
+  { *yydata->output_ = $1; }
 
 expression:
   expression DISJUNCTION expression
@@ -90,7 +110,7 @@ static bool Character(llvm::StringRef* input,
                       Rune* character) {
   int len = charntorune(character, input->data(), input->size());
   if (len > 0) {
-    *input = input->substr(len);
+    *input = input->drop_front(len);
     return true;
   }
   return false;
@@ -146,9 +166,9 @@ static bool CharacterClass(llvm::StringRef* input,
 
 typedef redgrep_yy::parser::token_type TokenType;
 
-int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, llvm::StringRef* input) {
+int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata) {
   Rune character;
-  if (!Character(input, &character)) {
+  if (!Character(&yydata->input_, &character)) {
     return 0;
   }
   switch (character) {
@@ -171,7 +191,7 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, llvm::StringRef* input) {
     case '[': {
       std::set<Rune> character_class;
       bool complement;
-      if (!CharacterClass(input, &character_class, &complement) ||
+      if (!CharacterClass(&yydata->input_, &character_class, &complement) ||
           character_class.empty()) {
         return TokenType::ERROR;
       }
@@ -183,7 +203,7 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, llvm::StringRef* input) {
       return TokenType::FUNDAMENTAL;
     }
     case '\\':
-      if (!Character(input, &character)) {
+      if (!Character(&yydata->input_, &character)) {
         return TokenType::ERROR;
       }
       switch (character) {

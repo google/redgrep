@@ -26,7 +26,6 @@ using std::make_pair;
 using std::map;
 using std::pair;
 
-
 static void EmitHeader() {
   printf("digraph reddot {\n");
 }
