@@ -17,7 +17,7 @@
 %defines
 %locations
 
-%{
+%code requires {
 
 #include "llvm/ADT/StringRef.h"
 #include "regexp.h"
@@ -54,7 +54,7 @@ class Data {
 
 int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata);
 
-%}
+}
 
 %lex-param   { YYDATA* yydata }
 %parse-param { YYDATA* yydata }
