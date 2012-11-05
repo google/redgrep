@@ -574,6 +574,17 @@ TEST(Parse, KleeneClosure) {
           Byte('a')),
       "a*");
   EXPECT_PARSE(
+      Concatenation(
+          Byte('a'),
+          KleeneClosure(
+              Byte('a'))),
+      "a+");
+  EXPECT_PARSE(
+      Disjunction(
+          EmptyString(),
+          Byte('a')),
+      "a?");
+  EXPECT_PARSE(
       KleeneClosure(
           KleeneClosure(
               Byte('a'))),

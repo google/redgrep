@@ -129,7 +129,7 @@ namespace std {
   }                                                         \
                                                             \
   template <>                                               \
-  struct fun <redgrep::Exp> {                               \
+  struct fun<redgrep::Exp> {                                \
     bool operator()(redgrep::Exp x, redgrep::Exp y) const { \
       return x op y;                                        \
     }                                                       \
