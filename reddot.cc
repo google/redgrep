@@ -71,8 +71,7 @@ static void EmitFooter() {
   printf("}\n");
 }
 
-template <typename T>
-inline void HandleImpl(int nstates, const T& fa) {
+inline void HandleImpl(int nstates, const redgrep::FA& fa) {
   EmitHeader();
   for (int i = 0; i < nstates; ++i) {
     int curr = i;
@@ -130,22 +129,20 @@ inline void HandleImpl(int nstates, const T& fa) {
 
 static void HandleDFA(const char* str) {
   redgrep::Exp exp;
+  redgrep::DFA dfa;
   if (!redgrep::Parse(str, &exp)) {
     errx(1, "parse error");
   }
-  redgrep::DFA dfa;
   int nstates = redgrep::Compile(exp, &dfa);
   HandleImpl(nstates, dfa);
 }
 
 static void HandleTNFA(const char* str) {
   redgrep::Exp exp;
-  vector<int> modes;
-  vector<int> groups;
-  if (!redgrep::Parse(str, &exp, &modes, &groups)) {
+  redgrep::TNFA tnfa;
+  if (!redgrep::Parse(str, &exp, &tnfa.modes_, &tnfa.groups_)) {
     errx(1, "parse error");
   }
-  redgrep::TNFA tnfa;
   int nstates = redgrep::Compile(exp, &tnfa);
   HandleImpl(nstates, tnfa);
 }

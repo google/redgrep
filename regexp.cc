@@ -1020,7 +1020,7 @@ class FlattenConjunctionsAndDisjunctions : public WalkerBase {
   FlattenConjunctionsAndDisjunctions() {}
   virtual ~FlattenConjunctionsAndDisjunctions() {}
 
-  inline void Flatten(Exp exp, list<Exp>* subs) {
+  inline void FlattenImpl(Exp exp, list<Exp>* subs) {
     Kind kind = exp->kind();
     // In most cases, exp is a left-skewed binary tree.
     while (exp->kind() == kind &&
@@ -1051,13 +1051,13 @@ class FlattenConjunctionsAndDisjunctions : public WalkerBase {
 
   virtual Exp WalkConjunction(Exp exp) {
     list<Exp> subs;
-    Flatten(exp, &subs);
+    FlattenImpl(exp, &subs);
     return Conjunction(subs, false);
   }
 
   virtual Exp WalkDisjunction(Exp exp) {
     list<Exp> subs;
-    Flatten(exp, &subs);
+    FlattenImpl(exp, &subs);
     return Disjunction(subs, false);
   }
 
@@ -1204,11 +1204,10 @@ bool Match(Exp exp, llvm::StringRef str) {
   return match;
 }
 
-// Compiles exp to a FA.
+// Outputs the FA compiled from exp.
 // If tagged is true, extended logic is enabled to construct a TNFA.
 // Otherwise, standard logic is used to construct a DFA.
-template <typename T>
-inline size_t CompileImpl(Exp exp, bool tagged, T* fa) {
+inline size_t CompileImpl(Exp exp, bool tagged, FA* fa) {
   fa->Clear();
   map<Exp, int> states;
   list<Exp> queue;
@@ -1367,9 +1366,7 @@ static bool Precedes(const vector<int>& x,
 
 // Follows ε-transitions in order to augment states with its ε-closure.
 // The value of each tag seen will be set to pos.
-static void FollowEpsilons(const TNFA& tnfa,
-                           const vector<int>& modes,
-                           int pos,
+static void FollowEpsilons(const TNFA& tnfa, int pos,
                            map<int, vector<int>>* states) {
   list<int> queue;
   for (const auto& i : *states) {
@@ -1390,7 +1387,7 @@ static void FollowEpsilons(const TNFA& tnfa,
       auto state = states->insert(make_pair(next, copy));
       if (state.second) {
         queue.push_back(next);
-      } else if (Precedes(copy, state.first->second, modes)) {
+      } else if (Precedes(copy, state.first->second, tnfa.modes_)) {
         state.first->second = copy;
         queue.push_back(next);
       }
@@ -1399,12 +1396,11 @@ static void FollowEpsilons(const TNFA& tnfa,
   }
 }
 
-bool Match(const TNFA& tnfa, llvm::StringRef str,
-           const vector<int>& modes, vector<int>* values) {
+bool Match(const TNFA& tnfa, llvm::StringRef str, vector<int>* values) {
   map<int, vector<int>> states;
-  states[0].assign(modes.size(), -1);
+  states[0].assign(tnfa.modes_.size(), -1);
   int pos = 0;
-  FollowEpsilons(tnfa, modes, pos, &states);
+  FollowEpsilons(tnfa, pos, &states);
   while (!str.empty()) {
     int byte = str[0];
     str = str.drop_front(1);
@@ -1432,13 +1428,16 @@ bool Match(const TNFA& tnfa, llvm::StringRef str,
       }
     }
     ++pos;
-    FollowEpsilons(tnfa, modes, pos, &states);
+    FollowEpsilons(tnfa, pos, &states);
   }
   for (const auto& i : states) {
     int curr = i.first;
+    // Note that a TNFA should have exactly one accepting state.
     if (tnfa.IsAcceptingState(curr)) {
-      // Note that a TNFA should have exactly one accepting state.
-      *values = i.second;
+      values->resize(tnfa.groups_.size());
+      for (int j = 0; j < tnfa.groups_.size(); ++j) {
+        (*values)[j] = i.second[tnfa.groups_[j]];
+      }
       return true;
     }
   }

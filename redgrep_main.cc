@@ -133,8 +133,8 @@ int main(int argc, char** argv) {
     } else {
       break;
     }
-    argc--;
-    argv++;
+    --argc;
+    ++argv;
   }
 
   if (re_str.empty()) {

@@ -326,6 +326,9 @@ class TNFA : public FA {
   TNFA() {}
   virtual ~TNFA() {}
 
+  vector<int> modes_;
+  vector<int> groups_;
+
  private:
   //DISALLOW_COPY_AND_ASSIGN(TNFA);
   TNFA(const TNFA&) = delete;
@@ -344,9 +347,8 @@ size_t Compile(Exp exp, TNFA* tnfa);
 bool Match(const DFA& dfa, llvm::StringRef str);
 
 // Returns the result of matching str using tnfa.
-// Outputs the value of each tag.
-bool Match(const TNFA& tnfa, llvm::StringRef str,
-           const vector<int>& modes, vector<int>* values);
+// Outputs the value of each tag that encloses a capturing group.
+bool Match(const TNFA& tnfa, llvm::StringRef str, vector<int>* values);
 
 // Represents a function and its machine code.
 // Note that neither the function nor the machine code is owned.
