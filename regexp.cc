@@ -26,25 +26,25 @@
 #include <vector>
 
 #include "llvm/ADT/StringRef.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Constants.h"
-#include "llvm/DataLayout.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JIT.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
-#include "llvm/Function.h"
-#include "llvm/GlobalValue.h"
-#include "llvm/IRBuilder.h"
-#include "llvm/Instructions.h"
-#include "llvm/LLVMContext.h"
-#include "llvm/Module.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/TypeBuilder.h"
 #include "llvm/PassManager.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/MutexGuard.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/TypeBuilder.h"
 #include "parser.tab.hh"
 #include "utf/utf.h"
 
@@ -63,15 +63,23 @@ Expression::Expression(Kind kind)
       data_(0),
       norm_(true) {}
 
+Expression::Expression(Kind kind, const pair<int, int>& tag)
+    : kind_(kind),
+      data_(reinterpret_cast<intptr_t>(new pair<int, int>(tag))),
+      norm_(true) {}
+
 Expression::Expression(Kind kind, int byte)
     : kind_(kind),
       data_(byte),
       norm_(true) {}
 
+#if 0
+// This is identical to the Tag constructor.
 Expression::Expression(Kind kind, const pair<int, int>& byte_range)
     : kind_(kind),
       data_(reinterpret_cast<intptr_t>(new pair<int, int>(byte_range))),
       norm_(true) {}
+#endif
 
 Expression::Expression(Kind kind, const list<Exp>& subexpressions, bool norm)
     : kind_(kind),
@@ -82,6 +90,12 @@ Expression::~Expression() {
   switch (kind()) {
     case kEmptySet:
     case kEmptyString:
+      break;
+
+    case kTag:
+      delete reinterpret_cast<pair<int, int>*>(data());
+      break;
+
     case kAnyByte:
       break;
 
@@ -100,6 +114,10 @@ Expression::~Expression() {
       delete reinterpret_cast<list<Exp>*>(data());
       break;
   }
+}
+
+const pair<int, int>& Expression::tag() const {
+  return *reinterpret_cast<pair<int, int>*>(data());
 }
 
 int Expression::byte() const {
@@ -124,6 +142,17 @@ int Compare(Exp x, Exp y) {
   switch (x->kind()) {
     case kEmptySet:
     case kEmptyString:
+      return 0;
+
+    case kTag:
+      if (x->tag() < y->tag()) {
+        return -1;
+      }
+      if (x->tag() > y->tag()) {
+        return +1;
+      }
+      return 0;
+
     case kAnyByte:
       return 0;
 
@@ -176,9 +205,6 @@ int Compare(Exp x, Exp y) {
   abort();
 }
 
-// TODO(junyer): EmptySet, EmptyString, AnyByte, Byte and AnyCharacter
-// expressions could be singletons.
-
 Exp EmptySet() {
   Exp exp(new Expression(kEmptySet));
   return exp;
@@ -186,6 +212,11 @@ Exp EmptySet() {
 
 Exp EmptyString() {
   Exp exp(new Expression(kEmptyString));
+  return exp;
+}
+
+Exp Tag(const pair<int, int>& tag) {
+  Exp exp(new Expression(kTag, tag));
   return exp;
 }
 
@@ -280,6 +311,7 @@ Exp Normalised(Exp exp) {
   switch (exp->kind()) {
     case kEmptySet:
     case kEmptyString:
+    case kTag:
     case kAnyByte:
     case kByte:
     case kByteRange:
@@ -431,6 +463,11 @@ bool IsNullable(Exp exp) {
       // ν(ε) = ε
       return true;
 
+    case kTag:
+      // Although Tag expressions behave like EmptyString in other ways, they
+      // are not nullable.
+      return false;
+
     case kAnyByte:
       // ν(\C) = ∅
       return false;
@@ -449,9 +486,6 @@ bool IsNullable(Exp exp) {
 
     case kConcatenation:
       // ν(r · s) = ν(r) & ν(s)
-      // Non-lazy form:
-      // return Conjunction(Nullability(exp->head()),
-      //                    Nullability(exp->tail()));
       return IsNullable(exp->head()) && IsNullable(exp->tail());
 
     case kComplement:
@@ -487,6 +521,7 @@ Exp Derivative(Exp exp, int byte) {
       return EmptySet();
 
     case kEmptyString:
+    case kTag:
       // ∂aε = ∅
       return EmptySet();
 
@@ -520,11 +555,6 @@ Exp Derivative(Exp exp, int byte) {
 
     case kConcatenation:
       // ∂a(r · s) = ∂ar · s + ν(r) · ∂as
-      // Non-lazy form:
-      // return Disjunction(Concatenation(Derivative(exp->head(), byte),
-      //                                  exp->tail()),
-      //                    Concatenation(Nullability(exp->head()),
-      //                                  Derivative(exp->tail(), byte)));
       if (IsNullable(exp->head())) {
         return Disjunction(Concatenation(Derivative(exp->head(), byte),
                                          exp->tail()),
@@ -553,6 +583,208 @@ Exp Derivative(Exp exp, int byte) {
       list<Exp> subs;
       for (Exp sub : exp->subexpressions()) {
         sub = Derivative(sub, byte);
+        subs.push_back(sub);
+      }
+      return Disjunction(subs, false);
+    }
+  }
+  abort();
+}
+
+// Denormalises exp to a Conjunction (i.e. inner set) if necessary.
+static Exp InnerSet(Exp exp) {
+  exp = Normalised(exp);
+  if (exp->kind() == kConjunction) {
+    return exp;
+  } else {
+    return Conjunction({exp}, false);
+  }
+}
+
+// Denormalises exp to a Disjunction (i.e. outer set) if necessary.
+static Exp OuterSet(Exp exp) {
+  exp = Normalised(exp);
+  if (exp->kind() == kDisjunction) {
+    list<Exp> subs;
+    for (Exp sub : exp->subexpressions()) {
+      sub = InnerSet(sub);
+      subs.push_back(sub);
+    }
+    return Disjunction(subs, false);
+  } else {
+    exp = InnerSet(exp);
+    return Disjunction({exp}, false);
+  }
+}
+
+// Helper for building Concatenation expressions with partial derivatives.
+static Exp PartialConcatenation(Exp head, Exp tail) {
+  Exp outer = OuterSet(head);
+  list<Exp> inners;
+  for (Exp inner : outer->subexpressions()) {
+    inner = Concatenation(inner, tail);
+    inners.push_back(inner);
+  }
+  return Disjunction(inners, false);
+}
+
+// Helper for building Conjunction expressions with partial derivatives.
+static Exp PartialConjunction(const list<Exp>& subs) {
+  Exp outer;
+  for (Exp sub : subs) {
+    if (outer == nullptr) {
+      outer = OuterSet(sub);
+    } else {
+      Exp x = outer;
+      Exp y = OuterSet(sub);
+      list<Exp> inners;
+      for (Exp xinner : x->subexpressions()) {
+        for (Exp yinner : y->subexpressions()) {
+          Exp inner = Conjunction(xinner, yinner);
+          inners.push_back(inner);
+        }
+      }
+      outer = Disjunction(inners, false);
+    }
+  }
+  return outer;
+}
+
+// Helper for building Complement expressions with partial derivatives.
+// junyer's OCD wishes for this to be moved above PartialConjunction().
+static Exp PartialComplement(Exp sub) {
+  Exp outer = OuterSet(sub);
+  list<Exp> inners;
+  for (Exp inner : outer->subexpressions()) {
+    list<Exp> subs;
+    for (Exp sub : inner->subexpressions()) {
+      sub = Complement(sub);
+      subs.push_back(sub);
+    }
+    inner = Disjunction(subs, false);
+    inners.push_back(inner);
+  }
+  return PartialConjunction(inners);
+}
+
+Exp Partial(Exp exp, int byte) {
+  switch (exp->kind()) {
+    case kEmptySet:
+      // ∂a∅ = ∅
+      return EmptySet();
+
+    case kEmptyString:
+    case kTag:
+      // ∂aε = ∅
+      return EmptySet();
+
+    case kAnyByte:
+      // ∂a\C = ε
+      return EmptyString();
+
+    case kByte:
+      // ∂aa = ε
+      // ∂ab = ∅ for b ≠ a
+      if (exp->byte() == byte) {
+        return EmptyString();
+      } else {
+        return EmptySet();
+      }
+
+    case kByteRange:
+      // ∂aS = ε if a ∈ S
+      //       ∅ if a ∉ S
+      if (exp->byte_range().first <= byte &&
+          byte <= exp->byte_range().second) {
+        return EmptyString();
+      } else {
+        return EmptySet();
+      }
+
+    case kKleeneClosure:
+      // ∂a(r∗) = ∂ar · r∗
+      return PartialConcatenation(Partial(exp->sub(), byte),
+                                  exp);
+
+    case kConcatenation:
+      // ∂a(r · s) = ∂ar · s + ν(r) · ∂as
+      if (IsNullable(exp->head())) {
+        return Disjunction(PartialConcatenation(Partial(exp->head(), byte),
+                                                exp->tail()),
+                           Partial(exp->tail(), byte));
+      } else {
+        return PartialConcatenation(Partial(exp->head(), byte),
+                                    exp->tail());
+      }
+
+    case kComplement:
+      // ∂a(¬r) = ¬(∂ar)
+      return PartialComplement(Partial(exp->sub(), byte));
+
+    case kConjunction: {
+      // ∂a(r & s) = ∂ar & ∂as
+      list<Exp> subs;
+      for (Exp sub : exp->subexpressions()) {
+        sub = Partial(sub, byte);
+        subs.push_back(sub);
+      }
+      return PartialConjunction(subs);
+    }
+
+    case kDisjunction: {
+      // ∂a(r + s) = ∂ar + ∂as
+      list<Exp> subs;
+      for (Exp sub : exp->subexpressions()) {
+        sub = Partial(sub, byte);
+        subs.push_back(sub);
+      }
+      return Disjunction(subs, false);
+    }
+  }
+  abort();
+}
+
+Exp Epsilon(Exp exp) {
+  switch (exp->kind()) {
+    case kEmptySet:
+    case kEmptyString:
+    case kTag:
+    case kAnyByte:
+    case kByte:
+    case kByteRange:
+      return exp;
+
+    case kKleeneClosure:
+      return Disjunction(EmptyString(),
+                         PartialConcatenation(Epsilon(exp->sub()),
+                                              exp));
+
+    case kConcatenation:
+      if (IsNullable(exp->head())) {
+        return Disjunction(PartialConcatenation(Epsilon(exp->head()),
+                                                exp->tail()),
+                           Epsilon(exp->tail()));
+      } else {
+        return PartialConcatenation(Epsilon(exp->head()),
+                                    exp->tail());
+      }
+
+    case kComplement:
+      return exp;
+
+    case kConjunction: {
+      list<Exp> subs;
+      for (Exp sub : exp->subexpressions()) {
+        sub = Epsilon(sub);
+        subs.push_back(sub);
+      }
+      return PartialConjunction(subs);
+    }
+
+    case kDisjunction: {
+      list<Exp> subs;
+      for (Exp sub : exp->subexpressions()) {
+        sub = Epsilon(sub);
         subs.push_back(sub);
       }
       return Disjunction(subs, false);
@@ -614,6 +846,7 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
       return;
 
     case kEmptyString:
+    case kTag:
       // C(ε) = {Σ}
       partitions->push_back({});
       return;
@@ -676,7 +909,7 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
           Partitions(sub, partitions);
         } else {
           list<bitset<256>> x, y;
-          std::swap(*partitions, x);
+          partitions->swap(x);
           Partitions(sub, &y);
           Intersection(x, y, partitions);
         }
@@ -690,7 +923,7 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
           Partitions(sub, partitions);
         } else {
           list<bitset<256>> x, y;
-          std::swap(*partitions, x);
+          partitions->swap(x);
           Partitions(sub, &y);
           Intersection(x, y, partitions);
         }
@@ -700,10 +933,263 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
   abort();
 }
 
+// A simple framework for implementing the post-parse rewrites.
+class WalkerBase {
+ public:
+  WalkerBase() {}
+  virtual ~WalkerBase() {}
+
+  virtual Exp WalkTag(Exp exp) {
+    return exp;
+  }
+
+  virtual Exp WalkKleeneClosure(Exp exp) {
+    Exp sub = Walk(exp->sub());
+    return KleeneClosure(sub);
+  }
+
+  virtual Exp WalkConcatenation(Exp exp) {
+    Exp head = Walk(exp->head());
+    Exp tail = Walk(exp->tail());
+    return Concatenation(head, tail);
+  }
+
+  virtual Exp WalkComplement(Exp exp) {
+    Exp sub = Walk(exp->sub());
+    return Complement(sub);
+  }
+
+  virtual Exp WalkConjunction(Exp exp) {
+    list<Exp> subs;
+    for (Exp sub : exp->subexpressions()) {
+      sub = Walk(sub);
+      subs.push_back(sub);
+    }
+    return Conjunction(subs, false);
+  }
+
+  virtual Exp WalkDisjunction(Exp exp) {
+    list<Exp> subs;
+    for (Exp sub : exp->subexpressions()) {
+      sub = Walk(sub);
+      subs.push_back(sub);
+    }
+    return Disjunction(subs, false);
+  }
+
+  Exp Walk(Exp exp) {
+    switch (exp->kind()) {
+      case kEmptySet:
+      case kEmptyString:
+        return exp;
+
+      case kTag:
+        return WalkTag(exp);
+
+      case kAnyByte:
+      case kByte:
+      case kByteRange:
+        return exp;
+
+      case kKleeneClosure:
+        return WalkKleeneClosure(exp);
+
+      case kConcatenation:
+        return WalkConcatenation(exp);
+
+      case kComplement:
+        return WalkComplement(exp);
+
+      case kConjunction:
+        return WalkConjunction(exp);
+
+      case kDisjunction:
+        return WalkDisjunction(exp);
+    }
+    abort();
+  }
+
+ private:
+  //DISALLOW_COPY_AND_ASSIGN(WalkerBase);
+  WalkerBase(const WalkerBase&) = delete;
+  void operator=(const WalkerBase&) = delete;
+};
+
+class FlattenConjunctionsAndDisjunctions : public WalkerBase {
+ public:
+  FlattenConjunctionsAndDisjunctions() {}
+  virtual ~FlattenConjunctionsAndDisjunctions() {}
+
+  inline void Flatten(Exp exp, list<Exp>* subs) {
+    Kind kind = exp->kind();
+    // In most cases, exp is a left-skewed binary tree.
+    while (exp->kind() == kind &&
+           exp->subexpressions().size() == 2) {
+      subs->push_front(exp->tail());
+      exp = exp->head();
+    }
+    if (exp->kind() == kind) {
+      list<Exp> copy = exp->subexpressions();
+      subs->splice(subs->begin(), copy);
+    } else {
+      subs->push_front(exp);
+    }
+    list<Exp>::iterator i = subs->begin();
+    while (i != subs->end()) {
+      Exp sub = *i;
+      sub = Walk(sub);
+      if (sub->kind() == kind) {
+        list<Exp> copy = sub->subexpressions();
+        subs->splice(i, copy);
+        i = subs->erase(i);
+      } else {
+        *i = sub;
+        ++i;
+      }
+    }
+  }
+
+  virtual Exp WalkConjunction(Exp exp) {
+    list<Exp> subs;
+    Flatten(exp, &subs);
+    return Conjunction(subs, false);
+  }
+
+  virtual Exp WalkDisjunction(Exp exp) {
+    list<Exp> subs;
+    Flatten(exp, &subs);
+    return Disjunction(subs, false);
+  }
+
+ private:
+  //DISALLOW_COPY_AND_ASSIGN(FlattenConjunctionsAndDisjunctions);
+  FlattenConjunctionsAndDisjunctions(const FlattenConjunctionsAndDisjunctions&) = delete;
+  void operator=(const FlattenConjunctionsAndDisjunctions&) = delete;
+};
+
+class StripTags : public WalkerBase {
+ public:
+  StripTags() {}
+  virtual ~StripTags() {}
+
+  virtual Exp WalkConcatenation(Exp exp) {
+    Exp head = Walk(exp->head());
+    Exp tail = Walk(exp->tail());
+    if (head->kind() == kTag) {
+      return tail;
+    }
+    if (tail->kind() == kTag) {
+      return head;
+    }
+    return Concatenation(head, tail);
+  }
+
+ private:
+  //DISALLOW_COPY_AND_ASSIGN(StripTags);
+  StripTags(const StripTags&) = delete;
+  void operator=(const StripTags&) = delete;
+};
+
+class ApplyTagsWithinDisjunctions : public WalkerBase {
+ public:
+  ApplyTagsWithinDisjunctions() {}
+  virtual ~ApplyTagsWithinDisjunctions() {}
+
+  virtual Exp WalkDisjunction(Exp exp) {
+    // Applying Tags to AnyCharacter or CharacterClass is a waste of space
+    // and time. In the former case, it breaks the .∗ ≈ ¬∅ rewrite. In the
+    // latter case, the number of subexpressions could be extremely large.
+    bool unneeded = true;
+    for (Exp sub : exp->subexpressions()) {
+      while (sub->kind() == kConcatenation &&
+             (sub->head()->kind() == kByte ||
+              sub->head()->kind() == kByteRange)) {
+        sub = sub->tail();
+      }
+      unneeded &= (sub->kind() == kByte ||
+                   sub->kind() == kByteRange);
+    }
+    if (unneeded) {
+      return exp;
+    }
+
+    list<Exp> subs;
+    for (Exp sub : exp->subexpressions()) {
+      sub = Walk(sub);
+      // This left parenthesis (non-capturing) is passive.
+      Exp left = Tag(0, 0);
+      // This right parenthesis is passive.
+      Exp right = Tag(1, 0);
+      sub = Concatenation(left, sub, right);
+      subs.push_back(sub);
+    }
+    return Disjunction(subs, false);
+  }
+
+ private:
+  //DISALLOW_COPY_AND_ASSIGN(ApplyTagsWithinDisjunctions);
+  ApplyTagsWithinDisjunctions(const ApplyTagsWithinDisjunctions&) = delete;
+  void operator=(const ApplyTagsWithinDisjunctions&) = delete;
+};
+
+class NumberTags : public WalkerBase {
+ public:
+  explicit NumberTags(redgrep_yy::Data* yydata)
+      : yydata_(yydata) {}
+  virtual ~NumberTags() {}
+
+  virtual Exp WalkTag(Exp exp) {
+    return yydata_->Number(exp);
+  }
+
+ private:
+  redgrep_yy::Data* yydata_;
+
+  //DISALLOW_COPY_AND_ASSIGN(NumberTags);
+  NumberTags(const NumberTags&) = delete;
+  void operator=(const NumberTags&) = delete;
+};
+
+class StripTagsWithinComplements : public WalkerBase {
+ public:
+  StripTagsWithinComplements() {}
+  virtual ~StripTagsWithinComplements() {}
+
+  virtual Exp WalkComplement(Exp exp) {
+    Exp sub = StripTags().Walk(exp->sub());
+    return Complement(sub);
+  }
+
+ private:
+  //DISALLOW_COPY_AND_ASSIGN(StripTagsWithinComplements);
+  StripTagsWithinComplements(const StripTagsWithinComplements&) = delete;
+  void operator=(const StripTagsWithinComplements&) = delete;
+};
+
 bool Parse(llvm::StringRef str, Exp* exp) {
   redgrep_yy::Data yydata(str, exp);
   redgrep_yy::parser parser(&yydata);
-  return parser.parse() == 0;
+  if (parser.parse() == 0) {
+    *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
+    *exp = StripTags().Walk(*exp);
+    return true;
+  }
+  return false;
+}
+
+bool Parse(llvm::StringRef str, Exp* exp,
+           vector<int>* modes, vector<int>* groups) {
+  redgrep_yy::Data yydata(str, exp);
+  redgrep_yy::parser parser(&yydata);
+  if (parser.parse() == 0) {
+    *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
+    *exp = ApplyTagsWithinDisjunctions().Walk(*exp);
+    *exp = NumberTags(&yydata).Walk(*exp);
+    *exp = StripTagsWithinComplements().Walk(*exp);
+    yydata.Export(modes, groups);
+    return true;
+  }
+  return false;
 }
 
 bool Match(Exp exp, llvm::StringRef str) {
@@ -718,19 +1204,82 @@ bool Match(Exp exp, llvm::StringRef str) {
   return match;
 }
 
-size_t Compile(Exp exp, DFA* dfa) {
-  dfa->transition_.clear();
-  dfa->accepting_.clear();
+// Compiles exp to a FA.
+// If tagged is true, extended logic is enabled to construct a TNFA.
+// Otherwise, standard logic is used to construct a DFA.
+template <typename T>
+inline size_t CompileImpl(Exp exp, bool tagged, T* fa) {
+  fa->Clear();
   map<Exp, int> states;
   list<Exp> queue;
+  auto LookupOrInsert = [&states, &queue](Exp exp) -> int {
+    auto state = states.insert(make_pair(exp, states.size()));
+    if (state.first->second > 0 &&
+        state.second) {
+      queue.push_back(exp);
+    }
+    return state.first->second;
+  };
   queue.push_back(exp);
   while (!queue.empty()) {
     exp = queue.front();
     queue.pop_front();
     exp = Normalised(exp);
-    auto state = states.insert(make_pair(exp, states.size()));
-    int curr = state.first->second;
-    dfa->accepting_[curr] = IsNullable(exp);
+    int curr = LookupOrInsert(exp);
+    if (exp->kind() == kEmptySet) {
+      fa->error_ = curr;
+    }
+    fa->accepting_[curr] = IsNullable(exp);
+    if (tagged) {
+      if (exp->kind() == kDisjunction) {
+        for (Exp sub : exp->subexpressions()) {
+          int next = LookupOrInsert(sub);
+          fa->epsilon_.insert(make_pair(curr, make_pair(next, set<int>())));
+        }
+        continue;
+      }
+      set<int> tags;
+      Exp inn = InnerSet(exp);
+      list<Exp> subs;
+      for (Exp sub : inn->subexpressions()) {
+        while (sub->kind() == kConcatenation &&
+               sub->head()->kind() == kTag) {
+          tags.insert(sub->head()->tag().first);
+          sub = sub->tail();
+        }
+        if (sub->kind() == kTag) {
+          tags.insert(sub->tag().first);
+          sub = EmptyString();
+        }
+        subs.push_back(sub);
+      }
+      inn = Conjunction(subs, false);
+      inn = Normalised(inn);
+      if (inn != exp) {
+        int next = LookupOrInsert(inn);
+        fa->epsilon_.insert(make_pair(curr, make_pair(next, tags)));
+        continue;
+      }
+      Exp eps = Epsilon(exp);
+      eps = Normalised(eps);
+      if (eps != exp) {
+        bool removed = false;
+        if (eps->kind() == kDisjunction) {
+          list<Exp> copy = eps->subexpressions();
+          copy.remove(exp);
+          if (copy != eps->subexpressions()) {
+            removed = true;
+            eps = Disjunction(copy, false);
+            eps = Normalised(eps);
+          }
+        }
+        int next = LookupOrInsert(eps);
+        fa->epsilon_.insert(make_pair(curr, make_pair(next, set<int>())));
+        if (!removed) {
+          continue;
+        }
+      }
+    }
     list<bitset<256>> partitions;
     Partitions(exp, &partitions);
     int next0;
@@ -739,33 +1288,37 @@ size_t Compile(Exp exp, DFA* dfa) {
          ++i) {
       int byte;
       if (i == partitions.begin()) {
-        // *i is Σ-based. Use a byte that it doesn't contain. ;)
+        // *i is Σ-based. Use a byte that it doesn't contain.
         byte = -1;
       } else {
         // *i is ∅-based. Use the first byte that it contains.
         for (byte = 0; !i->test(byte); ++byte) {}
       }
-      Exp der = Derivative(exp, byte);
+      Exp der = tagged ? Partial(exp, byte) : Derivative(exp, byte);
       der = Normalised(der);
-      auto state = states.insert(make_pair(der, states.size()));
-      int next = state.first->second;
-      if (state.second) {
-        queue.push_back(der);
-      }
+      int next = LookupOrInsert(der);
       if (i == partitions.begin()) {
         // Set the "default" transition.
-        dfa->transition_[make_pair(curr, byte)] = next;
+        fa->transition_[make_pair(curr, byte)] = next;
         next0 = next;
       } else if (next != next0) {
         for (byte = 0; byte < 256; ++byte) {
           if (i->test(byte)) {
-            dfa->transition_[make_pair(curr, byte)] = next;
+            fa->transition_[make_pair(curr, byte)] = next;
           }
         }
       }
     }
   }
   return states.size();
+}
+
+size_t Compile(Exp exp, DFA* dfa) {
+  return CompileImpl(exp, false, dfa);
+}
+
+size_t Compile(Exp exp, TNFA* tnfa) {
+  return CompileImpl(exp, true, tnfa);
 }
 
 bool Match(const DFA& dfa, llvm::StringRef str) {
@@ -776,15 +1329,120 @@ bool Match(const DFA& dfa, llvm::StringRef str) {
     auto transition = dfa.transition_.find(make_pair(curr, byte));
     if (transition == dfa.transition_.end()) {
       // Get the "default" transition.
-      byte = -1;
-      transition = dfa.transition_.find(make_pair(curr, byte));
+      transition = dfa.transition_.find(make_pair(curr, -1));
     }
     int next = transition->second;
     curr = next;
   }
-  auto accepting = dfa.accepting_.find(curr);
-  bool match = accepting->second;
-  return match;
+  return dfa.IsAcceptingState(curr);
+}
+
+// Returns true iff x precedes y in the total order specified by modes.
+static bool Precedes(const vector<int>& x,
+                     const vector<int>& y,
+                     const vector<int>& modes) {
+  for (int i = 0; i < modes.size(); ++i) {
+    if (x[i] == y[i] ||
+        // For passive mode, we continue if both are -1 or both are not -1.
+        // Note that we don't bother checking if (x[i] == -1 && y[i] == -1)
+        // because the preceding check covers that case.
+        (modes[i] == 0 &&
+         x[i] != -1 && y[i] != -1)) {
+      continue;
+    }
+    switch (modes[i]) {
+      case -1:
+        return x[i] < y[i];
+      case 0:
+        return x[i] != -1;
+      case 1:
+        return x[i] > y[i];
+      default:
+        break;
+    }
+    abort();
+  }
+  return false;
+}
+
+// Follows ε-transitions in order to augment states with its ε-closure.
+// The value of each tag seen will be set to pos.
+static void FollowEpsilons(const TNFA& tnfa,
+                           const vector<int>& modes,
+                           int pos,
+                           map<int, vector<int>>* states) {
+  list<int> queue;
+  for (const auto& i : *states) {
+    int curr = i.first;
+    queue.push_back(curr);
+  }
+  while (!queue.empty()) {
+    int curr = queue.front();
+    queue.pop_front();
+    auto epsilon = tnfa.epsilon_.lower_bound(curr);
+    while (epsilon != tnfa.epsilon_.upper_bound(curr)) {
+      int next = epsilon->second.first;
+      const set<int>& tags = epsilon->second.second;
+      vector<int> copy = states->at(curr);
+      for (int tag : tags) {
+        copy[tag] = pos;
+      }
+      auto state = states->insert(make_pair(next, copy));
+      if (state.second) {
+        queue.push_back(next);
+      } else if (Precedes(copy, state.first->second, modes)) {
+        state.first->second = copy;
+        queue.push_back(next);
+      }
+      ++epsilon;
+    }
+  }
+}
+
+bool Match(const TNFA& tnfa, llvm::StringRef str,
+           const vector<int>& modes, vector<int>* values) {
+  map<int, vector<int>> states;
+  states[0].assign(modes.size(), -1);
+  int pos = 0;
+  FollowEpsilons(tnfa, modes, pos, &states);
+  while (!str.empty()) {
+    int byte = str[0];
+    str = str.drop_front(1);
+    map<int, vector<int>> tmp;
+    tmp.swap(states);
+    for (const auto& i : tmp) {
+      int curr = i.first;
+      if (tnfa.IsGlueState(curr)) {
+        continue;
+      }
+      auto transition = tnfa.transition_.find(make_pair(curr, byte));
+      if (transition == tnfa.transition_.end()) {
+        // Get the "default" transition.
+        transition = tnfa.transition_.find(make_pair(curr, -1));
+      }
+      int next = transition->second;
+      if (tnfa.IsErrorState(next)) {
+        continue;
+      }
+      auto state = states.insert(make_pair(next, i.second));
+      if (!state.second) {
+        // This should never happen: if state X and state Y both transition to
+        // state Z on byte B, then they should not have been separate states.
+        abort();
+      }
+    }
+    ++pos;
+    FollowEpsilons(tnfa, modes, pos, &states);
+  }
+  for (const auto& i : states) {
+    int curr = i.first;
+    if (tnfa.IsAcceptingState(curr)) {
+      // Note that a TNFA should have exactly one accepting state.
+      *values = i.second;
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace redgrep
@@ -807,8 +1465,8 @@ struct LLVM {
   int i_;  // monotonic counter, used for names
 };
 
-static LLVM* llvm_singleton;
 static pthread_once_t llvm_once = PTHREAD_ONCE_INIT;
+static LLVM* llvm_singleton;
 
 static void LLVMOnce() {
   llvm::InitializeNativeTarget();
@@ -885,7 +1543,7 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
     bb.SetInsertPoint(bb0);
     bb.CreateCondBr(
         bb.CreateIsNull(bb.CreateLoad(size)),
-        dfa.accepting_.find(curr)->second ? return_true : return_false,
+        dfa.IsAcceptingState(curr) ? return_true : return_false,
         bb1);
 
     bb.SetInsertPoint(bb1);
@@ -931,8 +1589,7 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
 class DiscoverMachineCodeSize : public llvm::JITEventListener {
  public:
   explicit DiscoverMachineCodeSize(Fun* fun)
-      : llvm::JITEventListener(),
-        fun_(fun) {}
+      : fun_(fun) {}
   virtual ~DiscoverMachineCodeSize() {}
 
   virtual void NotifyFunctionEmitted(const llvm::Function&,

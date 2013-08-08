@@ -58,9 +58,9 @@ int main(int argc, char** argv) {
     char buf[128];
     size_t len = LLVMDisasmInstruction(dis, addr, size, 0, buf, sizeof buf);
     if (len == 0) {
-      errx(1, "bad machine code at %lu (%p)", addr - base, addr);
+      errx(1, "bad machine code at %td (%p)", addr - base, addr);
     }
-    printf("%8lu%s\n", addr - base, buf);
+    printf("%8td%s\n", addr - base, buf);
     addr += len;
     size -= len;
   }

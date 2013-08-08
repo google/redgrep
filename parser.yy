@@ -35,14 +35,52 @@ namespace redgrep_yy {
 class Data {
  public:
   Data(llvm::StringRef str, redgrep::Exp* exp)
-      : input_(str),
-        output_(exp) {}
+      : str_(str),
+        exp_(exp),
+        modes_(),
+        groups_(),
+        stack_() {}
   virtual ~Data() {}
 
-  llvm::StringRef input_;
-  redgrep::Exp* output_;
+  // Numbers exp, which must be a Tag expression.
+  // Updates modes_ in order to record the mode of exp.
+  // Updates groups_ iff exp is opening a capturing group.
+  redgrep::Exp Number(redgrep::Exp exp) {
+    int num = exp->tag().first;
+    int mode = exp->tag().second;
+    if (num <= 0) {
+      int left = modes_.size();
+      modes_.push_back(0);
+      int right = modes_.size();
+      modes_.push_back(0);
+      if (num == -1) {
+        groups_.push_back(left);
+        groups_.push_back(right);
+      }
+      num = left;
+      stack_.push_front(right);
+    } else {
+      num = stack_.front();
+      stack_.pop_front();
+    }
+    modes_[num] = mode;
+    return redgrep::Tag(num, mode);
+  }
+
+  // Exports modes_ and groups_.
+  void Export(std::vector<int>* modes, std::vector<int>* groups) const {
+    *modes = modes_;
+    *groups = groups_;
+  }
+
+  llvm::StringRef str_;
+  redgrep::Exp* exp_;
 
  private:
+  std::vector<int> modes_;
+  std::vector<int> groups_;
+  std::list<int> stack_;
+
   //DISALLOW_COPY_AND_ASSIGN(Data);
   Data(const Data&) = delete;
   void operator=(const Data&) = delete;
@@ -72,7 +110,7 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata);
 
 start:
   expression
-  { *yydata->output_ = $1; }
+  { *yydata->exp_ = $1; }
 
 expression:
   expression DISJUNCTION expression
@@ -80,17 +118,25 @@ expression:
 | expression CONJUNCTION expression
   { $$ = redgrep::Conjunction($1, $3); }
 | COMPLEMENT expression
-  { $$ = redgrep::Complement($2); }
+  { $$ = redgrep::Complement($2);
+    // This left parenthesis (non-capturing) is minimal.
+    $$ = redgrep::Concatenation(redgrep::Tag(0, -1), $$, $1); }
 | expression expression %prec CONCATENATION
   { $$ = redgrep::Concatenation($1, $2); }
 | expression ZERO_OR_MORE
-  { $$ = redgrep::KleeneClosure($1); }
+  { $$ = redgrep::KleeneClosure($1);
+    // This left parenthesis (non-capturing) is minimal.
+    $$ = redgrep::Concatenation(redgrep::Tag(0, -1), $$, $2); }
 | expression ONE_OR_MORE
-  { $$ = redgrep::Concatenation($1, redgrep::KleeneClosure($1)); }
+  { $$ = redgrep::Concatenation($1, redgrep::KleeneClosure($1));
+    // This left parenthesis (non-capturing) is minimal.
+    $$ = redgrep::Concatenation(redgrep::Tag(0, -1), $$, $2); }
 | expression ZERO_OR_ONE
-  { $$ = redgrep::Disjunction(redgrep::EmptyString(), $1); }
+  { $$ = redgrep::Disjunction(redgrep::EmptyString(), $1);
+    // This left parenthesis (non-capturing) is minimal.
+    $$ = redgrep::Concatenation(redgrep::Tag(0, -1), $$, $2); }
 | LEFT_PARENTHESIS expression RIGHT_PARENTHESIS
-  { $$ = $2; }
+  { $$ = redgrep::Concatenation($1, $2, $3); }
 | FUNDAMENTAL
   { $$ = $1; }
 
@@ -168,7 +214,7 @@ typedef redgrep_yy::parser::token_type TokenType;
 
 int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata) {
   Rune character;
-  if (!Character(&yydata->input_, &character)) {
+  if (!Character(&yydata->str_, &character)) {
     return 0;
   }
   switch (character) {
@@ -177,21 +223,46 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata) {
     case '&':
       return TokenType::CONJUNCTION;
     case '!':
+      // This right parenthesis is maximal.
+      *lvalp = redgrep::Tag(1, 1);
       return TokenType::COMPLEMENT;
     case '*':
-      return TokenType::ZERO_OR_MORE;
     case '+':
-      return TokenType::ONE_OR_MORE;
     case '?':
-      return TokenType::ZERO_OR_ONE;
+      if (yydata->str_.startswith("?")) {
+        yydata->str_ = yydata->str_.drop_front(1);
+        // This right parenthesis is minimal.
+        *lvalp = redgrep::Tag(1, -1);
+      } else {
+        // This right parenthesis is maximal.
+        *lvalp = redgrep::Tag(1, 1);
+      }
+      switch (character) {
+        case '*':
+          return TokenType::ZERO_OR_MORE;
+        case '+':
+          return TokenType::ONE_OR_MORE;
+        case '?':
+          return TokenType::ZERO_OR_ONE;
+      }
     case '(':
+      if (yydata->str_.startswith("?:")) {
+        yydata->str_ = yydata->str_.drop_front(2);
+        // This left parenthesis (non-capturing) is passive.
+        *lvalp = redgrep::Tag(0, 0);
+      } else {
+        // This left parenthesis (capturing) is passive.
+        *lvalp = redgrep::Tag(-1, 0);
+      }
       return TokenType::LEFT_PARENTHESIS;
     case ')':
+      // This right parenthesis is passive.
+      *lvalp = redgrep::Tag(1, 0);
       return TokenType::RIGHT_PARENTHESIS;
     case '[': {
       std::set<Rune> character_class;
       bool complement;
-      if (!CharacterClass(&yydata->input_, &character_class, &complement) ||
+      if (!CharacterClass(&yydata->str_, &character_class, &complement) ||
           character_class.empty()) {
         return TokenType::ERROR;
       }
@@ -203,7 +274,7 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata) {
       return TokenType::FUNDAMENTAL;
     }
     case '\\':
-      if (!Character(&yydata->input_, &character)) {
+      if (!Character(&yydata->str_, &character)) {
         return TokenType::ERROR;
       }
       switch (character) {
