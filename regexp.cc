@@ -1179,14 +1179,13 @@ bool Parse(llvm::StringRef str, Exp* exp) {
 
 bool Parse(llvm::StringRef str, Exp* exp,
            vector<int>* modes, vector<int>* groups) {
-  redgrep_yy::Data yydata(str, exp);
+  redgrep_yy::Data yydata(str, exp, modes, groups);
   redgrep_yy::parser parser(&yydata);
   if (parser.parse() == 0) {
     *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
     *exp = ApplyTagsWithinDisjunctions().Walk(*exp);
     *exp = NumberTags(&yydata).Walk(*exp);
     *exp = StripTagsWithinComplements().Walk(*exp);
-    yydata.Export(modes, groups);
     return true;
   }
   return false;
@@ -1422,7 +1421,7 @@ bool Match(const TNFA& tnfa, llvm::StringRef str, vector<int>* values) {
       }
       auto state = states.insert(make_pair(next, i.second));
       if (!state.second) {
-        // This should never happen: if state X and state Y both transition to
+        // This should never happen. If state X and state Y both transition to
         // state Z on byte B, then they should not have been separate states.
         abort();
       }

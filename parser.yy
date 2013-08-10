@@ -37,25 +37,38 @@ class Data {
   Data(llvm::StringRef str, redgrep::Exp* exp)
       : str_(str),
         exp_(exp),
-        modes_(),
-        groups_(),
-        stack_() {}
+        modes_(nullptr),
+        groups_(nullptr),
+        stack_() {
+  }
+
+  Data(llvm::StringRef str, redgrep::Exp* exp,
+       std::vector<int>* modes, std::vector<int>* groups)
+      : str_(str),
+        exp_(exp),
+        modes_(modes),
+        groups_(groups),
+        stack_() {
+    modes_->clear();
+    groups_->clear();
+  }
+
   virtual ~Data() {}
 
   // Numbers exp, which must be a Tag expression.
-  // Updates modes_ in order to record the mode of exp.
-  // Updates groups_ iff exp is opening a capturing group.
+  // Updates modes in order to record the mode of exp.
+  // Updates groups iff exp is opening a capturing group.
   redgrep::Exp Number(redgrep::Exp exp) {
     int num = exp->tag().first;
     int mode = exp->tag().second;
     if (num <= 0) {
-      int left = modes_.size();
-      modes_.push_back(0);
-      int right = modes_.size();
-      modes_.push_back(0);
+      int left = modes_->size();
+      modes_->push_back(0);
+      int right = modes_->size();
+      modes_->push_back(0);
       if (num == -1) {
-        groups_.push_back(left);
-        groups_.push_back(right);
+        groups_->push_back(left);
+        groups_->push_back(right);
       }
       num = left;
       stack_.push_front(right);
@@ -63,22 +76,16 @@ class Data {
       num = stack_.front();
       stack_.pop_front();
     }
-    modes_[num] = mode;
+    (*modes_)[num] = mode;
     return redgrep::Tag(num, mode);
-  }
-
-  // Exports modes_ and groups_.
-  void Export(std::vector<int>* modes, std::vector<int>* groups) const {
-    *modes = modes_;
-    *groups = groups_;
   }
 
   llvm::StringRef str_;
   redgrep::Exp* exp_;
 
  private:
-  std::vector<int> modes_;
-  std::vector<int> groups_;
+  std::vector<int>* modes_;   // Not owned.
+  std::vector<int>* groups_;  // Not owned.
   std::list<int> stack_;
 
   //DISALLOW_COPY_AND_ASSIGN(Data);
