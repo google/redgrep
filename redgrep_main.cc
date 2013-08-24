@@ -34,13 +34,23 @@ const char kUsage[] =
   "  -H  print the file name for each match\n"
   "  -h  suppress the file name prefix on output\n"
   "\n"
-  "REGEXP may comprise multiple subexpressions:\n"
+  "Similar to the way in which find(1) lets you construct expressions,\n"
+  "REGEXP may comprise multiple subexpressions as separate arguments:\n"
   "\n"
-  "  [-e] EXPR     regular expression\n"
-  "  ( EXPR )      grouping\n"
-  "  ! EXPR        complement (NOT)\n"
-  "  EXPR -a EXPR  conjunction (AND)\n"
-  "  EXPR -o EXPR  disjunction (OR)\n";
+  "  [-e] EXPR       regular expression\n"
+  "  ( EXPR )        grouping\n"
+  "  ! EXPR          complement\n"
+  "  -not EXPR\n"
+  "  EXPR & EXPR     conjunction\n"
+  "  EXPR -a EXPR\n"
+  "  EXPR -and EXPR\n"
+  "  EXPR | EXPR     disjunction\n"
+  "  EXPR -o EXPR\n"
+  "  EXPR -or EXPR\n"
+  "\n"
+  "EXPR may begin with `^' in order to anchor it to the beginning of the\n"
+  "line and may end with `$' in order to anchor it to the end of the line.\n"
+  "\n";
 
 int main(int argc, char** argv) {
   // Parse options.
@@ -105,13 +115,13 @@ int main(int argc, char** argv) {
       if (parens < 0) {
         errx(2, "unmatched right parenthesis");
       }
-    } else if (!escape && arg == "!") {
+    } else if (!escape && (arg == "!" || arg == "-not")) {
       re_str += arg;
       complete = false;
-    } else if (!escape && (arg == "-a" || arg == "&")) {
+    } else if (!escape && (arg == "&" || arg == "-a" || arg == "-and")) {
       re_str += "&";
       complete = false;
-    } else if (!escape && (arg == "-o" || arg == "|")) {
+    } else if (!escape && (arg == "|" || arg == "-o" || arg == "-or")) {
       re_str += "|";
       complete = false;
     } else if (escape || !complete) {

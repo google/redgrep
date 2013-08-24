@@ -221,6 +221,9 @@ TEST(Normalised, Conjunction) {
   EXPECT_NORMALISED(
       Byte('a'),
       Conjunction(Byte('a'), Complement(EmptySet())));
+  EXPECT_NORMALISED(
+      EmptySet(),
+      Conjunction(EmptyString(), Complement(EmptyString())));
 }
 
 TEST(Normalised, Disjunction) {

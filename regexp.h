@@ -281,18 +281,22 @@ class FA {
     epsilon_.clear();
   }
 
-  bool IsErrorState(int state) const {
+  bool IsError(int state) const {
     return state == error_;
   }
 
-  bool IsAcceptingState(int state) const {
-    auto accepting = accepting_.find(state);
-    return accepting->second;
+  bool IsAccepting(int state) const {
+    return accepting_.at(state);
   }
 
-  bool IsGlueState(int state) const {
+  bool HasTransition(int state) const {
     auto transition = transition_.find(make_pair(state, -1));
-    return transition == transition_.end();
+    return transition != transition_.end();
+  }
+
+  bool HasEpsilon(int state) const {
+    auto epsilon = epsilon_.lower_bound(state);
+    return epsilon != epsilon_.upper_bound(state);
   }
 
   int error_;

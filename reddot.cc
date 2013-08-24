@@ -75,14 +75,30 @@ inline void HandleImpl(int nstates, const redgrep::FA& fa) {
   EmitHeader();
   for (int i = 0; i < nstates; ++i) {
     int curr = i;
-    if (fa.IsErrorState(curr)) {
+    if (fa.IsError(curr)) {
+      // This is the error state.
       EmitState(curr, "red");
-    } else if (fa.IsAcceptingState(curr)) {
+    } else if (fa.IsAccepting(curr)) {
+      // This is an accepting state.
       EmitState(curr, "green");
-    } else if (fa.IsGlueState(curr)) {
+    } else if (fa.HasTransition(curr)) {
+      // This is a real state.
+      auto transition = fa.transition_.find(make_pair(curr, -1));
+      if (transition->second == fa.error_) {
+        ++transition;
+        if (transition == fa.transition_.end() ||
+            transition->first.first != curr) {
+          // This is a junk state.
+          continue;
+        }
+      }
+      EmitState(curr, "white");
+    } else if (fa.HasEpsilon(curr)) {
+      // This is a glue state.
       EmitState(curr, "grey");
     } else {
-      EmitState(curr, "white");
+      // This is a junk state.
+      continue;
     }
   }
   map<pair<int, int>, list<pair<int, int>>> transition_map;
@@ -90,9 +106,10 @@ inline void HandleImpl(int nstates, const redgrep::FA& fa) {
     int curr = i.first.first;
     int byte = i.first.second;
     int next = i.second;
-    if (fa.IsErrorState(next)) {
-      continue;
-    } else if (byte == -1) {
+    if (byte == -1) {
+      if (fa.IsError(next)) {
+        continue;
+      }
       EmitTransition(curr, byte, next);
     } else {
       auto& range_list = transition_map[make_pair(curr, next)];

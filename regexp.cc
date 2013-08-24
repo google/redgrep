@@ -413,6 +413,14 @@ Exp Normalised(Exp exp) {
       if (subs.size() == 1) {
         return subs.front();
       }
+      // ε & r ≈ ∅ if ν(r) = ∅
+      if (subs.front()->kind() == kEmptyString) {
+        for (Exp sub : subs) {
+          if (!IsNullable(sub)) {
+            return EmptySet();
+          }
+        }
+      }
       return Conjunction(subs, true);
     }
 
@@ -1203,6 +1211,80 @@ bool Match(Exp exp, llvm::StringRef str) {
   return match;
 }
 
+// Prunes transitions and ε-transitions to junk states in fa.
+static void Prune(FA* fa) {
+  // Create a reverse mapping of transitions.
+  typedef decltype(fa->transition_)::iterator TransitionIterator;
+  multimap<int, TransitionIterator> reverse_transition;
+  for (TransitionIterator i = fa->transition_.begin();
+       i != fa->transition_.end();
+       ++i) {
+    reverse_transition.insert(make_pair(i->second, i));
+  }
+  // Create a reverse mapping of ε-transitions.
+  typedef decltype(fa->epsilon_)::iterator EpsilonIterator;
+  multimap<int, EpsilonIterator> reverse_epsilon;
+  for (EpsilonIterator i = fa->epsilon_.begin();
+       i != fa->epsilon_.end();
+       ++i) {
+    reverse_epsilon.insert(make_pair(i->second.first, i));
+  }
+  // Identify the states that are junk.
+  map<int, bool> states;
+  list<int> queue;
+  queue.push_back(fa->error_);
+  while (!queue.empty()) {
+    int next = queue.front();
+    queue.pop_front();
+    for (auto reverse = reverse_transition.lower_bound(next);
+         reverse != reverse_transition.upper_bound(next);
+         ++reverse) {
+      int curr = reverse->second->first.first;
+      if (fa->IsAccepting(curr)) {
+        // An accepting state is not junk.
+        continue;
+      }
+      auto state = states.insert(make_pair(curr, false));
+      if (state.second) {
+        auto transition = fa->transition_.find(make_pair(curr, -1));
+        ++transition;
+        if (transition == fa->transition_.end() ||
+            transition->first.first != curr) {
+          state.first->second = true;
+          queue.push_back(curr);
+        }
+      }
+    }
+  }
+  for (const auto& i : states) {
+    int curr = i.first;
+    if (i.second) {
+      queue.push_back(curr);
+    }
+  }
+  while (!queue.empty()) {
+    int next = queue.front();
+    queue.pop_front();
+    for (auto reverse = reverse_transition.lower_bound(next);
+         reverse != reverse_transition.upper_bound(next);
+         ++reverse) {
+      // Prune the transition by resetting it.
+      reverse->second->second = fa->error_;
+    }
+    for (auto reverse = reverse_epsilon.lower_bound(next);
+         reverse != reverse_epsilon.upper_bound(next);
+         ++reverse) {
+      int curr = reverse->second->first;
+      // Prune the ε-transition by unsetting it.
+      fa->epsilon_.erase(reverse->second);
+      if (!fa->HasTransition(curr) &&
+          !fa->HasEpsilon(curr)) {
+        queue.push_back(curr);
+      }
+    }
+  }
+}
+
 // Outputs the FA compiled from exp.
 // If tagged is true, extended logic is enabled to construct a TNFA.
 // Otherwise, standard logic is used to construct a DFA.
@@ -1308,6 +1390,7 @@ inline size_t CompileImpl(Exp exp, bool tagged, FA* fa) {
       }
     }
   }
+  Prune(fa);
   return states.size();
 }
 
@@ -1332,7 +1415,7 @@ bool Match(const DFA& dfa, llvm::StringRef str) {
     int next = transition->second;
     curr = next;
   }
-  return dfa.IsAcceptingState(curr);
+  return dfa.IsAccepting(curr);
 }
 
 // Returns true iff x precedes y in the total order specified by modes.
@@ -1375,8 +1458,9 @@ static void FollowEpsilons(const TNFA& tnfa, int pos,
   while (!queue.empty()) {
     int curr = queue.front();
     queue.pop_front();
-    auto epsilon = tnfa.epsilon_.lower_bound(curr);
-    while (epsilon != tnfa.epsilon_.upper_bound(curr)) {
+    for (auto epsilon = tnfa.epsilon_.lower_bound(curr);
+         epsilon != tnfa.epsilon_.upper_bound(curr);
+         ++epsilon) {
       int next = epsilon->second.first;
       const set<int>& tags = epsilon->second.second;
       vector<int> copy = states->at(curr);
@@ -1390,7 +1474,6 @@ static void FollowEpsilons(const TNFA& tnfa, int pos,
         state.first->second = copy;
         queue.push_back(next);
       }
-      ++epsilon;
     }
   }
 }
@@ -1407,7 +1490,7 @@ bool Match(const TNFA& tnfa, llvm::StringRef str, vector<int>* values) {
     tmp.swap(states);
     for (const auto& i : tmp) {
       int curr = i.first;
-      if (tnfa.IsGlueState(curr)) {
+      if (!tnfa.HasTransition(curr)) {
         continue;
       }
       auto transition = tnfa.transition_.find(make_pair(curr, byte));
@@ -1416,7 +1499,7 @@ bool Match(const TNFA& tnfa, llvm::StringRef str, vector<int>* values) {
         transition = tnfa.transition_.find(make_pair(curr, -1));
       }
       int next = transition->second;
-      if (tnfa.IsErrorState(next)) {
+      if (tnfa.IsError(next)) {
         continue;
       }
       auto state = states.insert(make_pair(next, i.second));
@@ -1432,7 +1515,7 @@ bool Match(const TNFA& tnfa, llvm::StringRef str, vector<int>* values) {
   for (const auto& i : states) {
     int curr = i.first;
     // Note that a TNFA should have exactly one accepting state.
-    if (tnfa.IsAcceptingState(curr)) {
+    if (tnfa.IsAccepting(curr)) {
       values->resize(tnfa.groups_.size());
       for (int j = 0; j < tnfa.groups_.size(); ++j) {
         (*values)[j] = i.second[tnfa.groups_[j]];
@@ -1531,17 +1614,16 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
   // Create two BasicBlocks per DFA state: the first branches if we have hit
   // the end of the string; the second switches to the next DFA state after
   // updating the automatic variables.
-  int nstates = dfa.transition_.rbegin()->first.first + 1;
   vector<pair<llvm::BasicBlock*, llvm::BasicBlock*>> states;
-  states.reserve(nstates);
-  for (int curr = 0; curr < nstates; ++curr) {
+  states.reserve(dfa.accepting_.size());
+  for (const auto& i : dfa.accepting_) {
     llvm::BasicBlock* bb0 = llvm::BasicBlock::Create(context, "", function);
     llvm::BasicBlock* bb1 = llvm::BasicBlock::Create(context, "", function);
 
     bb.SetInsertPoint(bb0);
     bb.CreateCondBr(
         bb.CreateIsNull(bb.CreateLoad(size)),
-        dfa.IsAcceptingState(curr) ? return_true : return_false,
+        i.second ? return_true : return_false,
         bb1);
 
     bb.SetInsertPoint(bb1);
