@@ -840,6 +840,38 @@ TEST(Parse, Quantifiers) {
           EmptyString(),
           Byte('a')),
       "a??");
+  EXPECT_PARSE(
+      Byte('a'),
+      "a{1}");
+  EXPECT_PARSE(
+      Byte('a'),
+      "a{1}?");
+  EXPECT_PARSE(
+      Concatenation(
+          Byte('a'),
+          KleeneClosure(
+              Byte('a'))),
+      "a{1,}");
+  EXPECT_PARSE(
+      Concatenation(
+          Byte('a'),
+          KleeneClosure(
+              Byte('a'))),
+      "a{1,}?");
+  EXPECT_PARSE(
+      Concatenation(
+          Byte('a'),
+          Disjunction(
+              EmptyString(),
+              Byte('a'))),
+      "a{1,2}");
+  EXPECT_PARSE(
+      Concatenation(
+          Byte('a'),
+          Disjunction(
+              EmptyString(),
+              Byte('a'))),
+      "a{1,2}?");
 }
 
 TEST(Parse, KleeneClosure) {
@@ -1063,34 +1095,82 @@ TEST(Parse_M_G, Quantifiers) {
       Concatenation(
           Tag(0, -1),
           Disjunction(
-              Concatenation(
-                  Tag(2, 0),
-                  EmptyString(),
-                  Tag(3, 0)),
-              Concatenation(
-                  Tag(4, 0),
-                  Byte('a'),
-                  Tag(5, 0))),
+              EmptyString(),
+              Byte('a')),
           Tag(1, 1)),
-      vector<int>({-1, 1, 0, 0, 0, 0}),
+      vector<int>({-1, 1}),
       vector<int>({}),
       "a?");
   EXPECT_PARSE_M_G(
       Concatenation(
           Tag(0, -1),
           Disjunction(
-              Concatenation(
-                  Tag(2, 0),
-                  EmptyString(),
-                  Tag(3, 0)),
-              Concatenation(
-                  Tag(4, 0),
-                  Byte('a'),
-                  Tag(5, 0))),
+              EmptyString(),
+              Byte('a')),
           Tag(1, -1)),
-      vector<int>({-1, -1, 0, 0, 0, 0}),
+      vector<int>({-1, -1}),
       vector<int>({}),
       "a??");
+  EXPECT_PARSE_M_G(
+      Concatenation(
+          Tag(0, -1),
+          Byte('a'),
+          Tag(1, 1)),
+      vector<int>({-1, 1}),
+      vector<int>({}),
+      "a{1}");
+  EXPECT_PARSE_M_G(
+      Concatenation(
+          Tag(0, -1),
+          Byte('a'),
+          Tag(1, -1)),
+      vector<int>({-1, -1}),
+      vector<int>({}),
+      "a{1}?");
+  EXPECT_PARSE_M_G(
+      Concatenation(
+          Tag(0, -1),
+          Concatenation(
+              Byte('a'),
+              KleeneClosure(Byte('a'))),
+          Tag(1, 1)),
+      vector<int>({-1, 1}),
+      vector<int>({}),
+      "a{1,}");
+  EXPECT_PARSE_M_G(
+      Concatenation(
+          Tag(0, -1),
+          Concatenation(
+              Byte('a'),
+              KleeneClosure(Byte('a'))),
+          Tag(1, -1)),
+      vector<int>({-1, -1}),
+      vector<int>({}),
+      "a{1,}?");
+  EXPECT_PARSE_M_G(
+      Concatenation(
+          Tag(0, -1),
+          Concatenation(
+              Byte('a'),
+              Disjunction(
+                  EmptyString(),
+                  Byte('a'))),
+          Tag(1, 1)),
+      vector<int>({-1, 1}),
+      vector<int>({}),
+      "a{1,2}");
+  EXPECT_PARSE_M_G(
+      Concatenation(
+          Tag(0, -1),
+          Concatenation(
+              Byte('a'),
+              Disjunction(
+                  EmptyString(),
+                  Byte('a'))),
+          Tag(1, -1)),
+      vector<int>({-1, -1}),
+      vector<int>({}),
+      "a{1,2}?");
 }
 
 TEST(Parse_M_G, ApplyTagsWithinDisjunctions) {
@@ -1318,6 +1398,60 @@ TEST_F(MatchTest, Quantifiers) {
   EXPECT_MATCH(true, vector<int>({0, 0, 0, 1}), "a");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
   EXPECT_MATCH(false, vector<int>({}), "aaa");
+  ParseAll("(a{1})");
+  CompileAll();
+  EXPECT_MATCH(false, vector<int>({}), "");
+  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
+  EXPECT_MATCH(false, vector<int>({}), "aa");
+  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  ParseAll("(a{1})(a{1})");
+  CompileAll();
+  EXPECT_MATCH(false, vector<int>({}), "");
+  EXPECT_MATCH(false, vector<int>({}), "a");
+  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  ParseAll("(a{1}?)(a{1})");
+  CompileAll();
+  EXPECT_MATCH(false, vector<int>({}), "");
+  EXPECT_MATCH(false, vector<int>({}), "a");
+  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  ParseAll("(a{1,})");
+  CompileAll();
+  EXPECT_MATCH(false, vector<int>({}), "");
+  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
+  EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
+  EXPECT_MATCH(true, vector<int>({0, 3}), "aaa");
+  ParseAll("(a{1,})(a{1,})");
+  CompileAll();
+  EXPECT_MATCH(false, vector<int>({}), "");
+  EXPECT_MATCH(false, vector<int>({}), "a");
+  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(true, vector<int>({0, 2, 2, 3}), "aaa");
+  ParseAll("(a{1,}?)(a{1,})");
+  CompileAll();
+  EXPECT_MATCH(false, vector<int>({}), "");
+  EXPECT_MATCH(false, vector<int>({}), "a");
+  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(true, vector<int>({0, 1, 1, 3}), "aaa");
+  ParseAll("(a{1,2})");
+  CompileAll();
+  EXPECT_MATCH(false, vector<int>({}), "");
+  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
+  EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
+  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  ParseAll("(a{1,2})(a{1,2})");
+  CompileAll();
+  EXPECT_MATCH(false, vector<int>({}), "");
+  EXPECT_MATCH(false, vector<int>({}), "a");
+  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(true, vector<int>({0, 2, 2, 3}), "aaa");
+  ParseAll("(a{1,2}?)(a{1,2})");
+  CompileAll();
+  EXPECT_MATCH(false, vector<int>({}), "");
+  EXPECT_MATCH(false, vector<int>({}), "a");
+  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(true, vector<int>({0, 1, 1, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Concatenation) {

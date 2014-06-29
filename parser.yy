@@ -108,7 +108,7 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata);
 %left CONJUNCTION
 %left COMPLEMENT
 %right CONCATENATION
-%left ZERO_OR_MORE ONE_OR_MORE ZERO_OR_ONE
+%left QUANTIFIER
 %nonassoc LEFT_PARENTHESIS RIGHT_PARENTHESIS
 %nonassoc FUNDAMENTAL
 %token ERROR
@@ -125,23 +125,21 @@ expression:
 | expression CONJUNCTION expression
   { $$ = redgrep::Conjunction($1, $3); }
 | COMPLEMENT expression
-  { $$ = redgrep::Complement($2);
-    // This left parenthesis (non-capturing) is minimal.
-    $$ = redgrep::Concatenation(redgrep::Tag(0, -1), $$, $1); }
+  { // This left parenthesis (non-capturing) is minimal.
+    redgrep::Exp left = redgrep::Tag(0, -1);
+    // This right parenthesis is maximal.
+    redgrep::Exp right = redgrep::Tag(1, 1);
+    $$ = redgrep::Complement($2);
+    $$ = redgrep::Concatenation(left, $$, right); }
 | expression expression %prec CONCATENATION
   { $$ = redgrep::Concatenation($1, $2); }
-| expression ZERO_OR_MORE
-  { $$ = redgrep::KleeneClosure($1);
-    // This left parenthesis (non-capturing) is minimal.
-    $$ = redgrep::Concatenation(redgrep::Tag(0, -1), $$, $2); }
-| expression ONE_OR_MORE
-  { $$ = redgrep::Concatenation($1, redgrep::KleeneClosure($1));
-    // This left parenthesis (non-capturing) is minimal.
-    $$ = redgrep::Concatenation(redgrep::Tag(0, -1), $$, $2); }
-| expression ZERO_OR_ONE
-  { $$ = redgrep::Disjunction(redgrep::EmptyString(), $1);
-    // This left parenthesis (non-capturing) is minimal.
-    $$ = redgrep::Concatenation(redgrep::Tag(0, -1), $$, $2); }
+| expression QUANTIFIER
+  { // This left parenthesis (non-capturing) is minimal.
+    redgrep::Exp left = redgrep::Tag(0, -1);
+    redgrep::Exp right; int min; int max;
+    std::tie(right, min, max) = $2->quantifier();
+    $$ = redgrep::Quantifier($1, min, max);
+    $$ = redgrep::Concatenation(left, $$, right); }
 | LEFT_PARENTHESIS expression RIGHT_PARENTHESIS
   { $$ = redgrep::Concatenation($1, $2, $3); }
 | FUNDAMENTAL
@@ -215,6 +213,65 @@ static bool CharacterClass(llvm::StringRef* input,
   return false;
 }
 
+static bool Quantifier(Rune character,
+                       llvm::StringRef* input,
+                       int* min,
+                       int* max) {
+  static const char kDigits[] = "0123456789";
+  auto Number = [&input](int* output) -> bool {
+    if (input->find_first_of(kDigits) == 0) {
+      int len = input->find_first_not_of(kDigits);
+      if (len != llvm::StringRef::npos && len <= 3) {
+        sscanf(input->data(), "%d", output);
+        *input = input->drop_front(len);
+        return true;
+      }
+    }
+    return false;
+  };
+  switch (character) {
+    case '*':
+      *min = 0;
+      *max = -1;
+      return true;
+    case '+':
+      *min = 1;
+      *max = -1;
+      return true;
+    case '?':
+      *min = 0;
+      *max = 1;
+      return true;
+    case '{': {
+      if (Number(min) && *min >= 0) {
+        if (input->startswith("}")) {  // {n}
+          *input = input->drop_front(1);
+          *max = *min;
+          return true;
+        }
+        if (input->startswith(",")) {
+          *input = input->drop_front(1);
+          if (input->startswith("}")) {  // {n,}
+            *input = input->drop_front(1);
+            *max = -1;
+            return true;
+          }
+          if (Number(max) && *max >= *min) {
+            if (input->startswith("}")) {  // {n,m}
+              *input = input->drop_front(1);
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+    default:
+      break;
+  }
+  abort();
+}
+
 }  // namespace
 
 typedef redgrep_yy::parser::token_type TokenType;
@@ -230,12 +287,15 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata) {
     case '&':
       return TokenType::CONJUNCTION;
     case '!':
-      // This right parenthesis is maximal.
-      *lvalp = redgrep::Tag(1, 1);
       return TokenType::COMPLEMENT;
     case '*':
     case '+':
     case '?':
+    case '{': {
+      int min, max;
+      if (!Quantifier(character, &yydata->str_, &min, &max)) {
+        return TokenType::ERROR;
+      }
       if (yydata->str_.startswith("?")) {
         yydata->str_ = yydata->str_.drop_front(1);
         // This right parenthesis is minimal.
@@ -244,14 +304,11 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata) {
         // This right parenthesis is maximal.
         *lvalp = redgrep::Tag(1, 1);
       }
-      switch (character) {
-        case '*':
-          return TokenType::ZERO_OR_MORE;
-        case '+':
-          return TokenType::ONE_OR_MORE;
-        case '?':
-          return TokenType::ZERO_OR_ONE;
-      }
+      // Somewhat perversely, we bundle the right parenthesis with min and max
+      // and unbundle them back in the parser action.
+      *lvalp = redgrep::Quantifier(*lvalp, min, max);
+      return TokenType::QUANTIFIER;
+    }
     case '(':
       if (yydata->str_.startswith("?:")) {
         yydata->str_ = yydata->str_.drop_front(2);

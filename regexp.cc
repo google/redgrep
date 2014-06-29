@@ -22,10 +22,12 @@
 #include <list>
 #include <map>
 #include <set>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JIT.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
@@ -53,9 +55,11 @@ namespace redgrep {
 using std::bitset;
 using std::list;
 using std::make_pair;
+using std::make_tuple;
 using std::map;
 using std::pair;
 using std::set;
+using std::tuple;
 using std::vector;
 
 Expression::Expression(Kind kind)
@@ -86,6 +90,11 @@ Expression::Expression(Kind kind, const list<Exp>& subexpressions, bool norm)
       data_(reinterpret_cast<intptr_t>(new list<Exp>(subexpressions))),
       norm_(norm) {}
 
+Expression::Expression(Kind kind, const tuple<Exp, int, int>& quantifier)
+    : kind_(kind),
+      data_(reinterpret_cast<intptr_t>(new tuple<Exp, int, int>(quantifier))),
+      norm_(false) {}
+
 Expression::~Expression() {
   switch (kind()) {
     case kEmptySet:
@@ -113,6 +122,10 @@ Expression::~Expression() {
     case kDisjunction:
       delete reinterpret_cast<list<Exp>*>(data());
       break;
+
+    case kQuantifier:
+      delete reinterpret_cast<tuple<Exp, int, int>*>(data());
+      break;
   }
 }
 
@@ -130,6 +143,10 @@ const pair<int, int>& Expression::byte_range() const {
 
 const list<Exp>& Expression::subexpressions() const {
   return *reinterpret_cast<list<Exp>*>(data());
+}
+
+const tuple<Exp, int, int>& Expression::quantifier() const {
+  return *reinterpret_cast<tuple<Exp, int, int>*>(data());
 }
 
 int Compare(Exp x, Exp y) {
@@ -201,6 +218,9 @@ int Compare(Exp x, Exp y) {
       }
       return 0;
     }
+
+    case kQuantifier:
+      break;
   }
   abort();
 }
@@ -257,6 +277,11 @@ Exp Conjunction(const list<Exp>& subexpressions, bool norm) {
 
 Exp Disjunction(const list<Exp>& subexpressions, bool norm) {
   Exp exp(new Expression(kDisjunction, subexpressions, norm));
+  return exp;
+}
+
+Exp Quantifier(const tuple<Exp, int, int>& quantifier) {
+  Exp exp(new Expression(kQuantifier, quantifier));
   return exp;
 }
 
@@ -457,6 +482,9 @@ Exp Normalised(Exp exp) {
       }
       return Disjunction(subs, true);
     }
+
+    case kQuantifier:
+      break;
   }
   abort();
 }
@@ -518,6 +546,9 @@ bool IsNullable(Exp exp) {
         }
       }
       return false;
+
+    case kQuantifier:
+      break;
   }
   abort();
 }
@@ -595,6 +626,9 @@ Exp Derivative(Exp exp, int byte) {
       }
       return Disjunction(subs, false);
     }
+
+    case kQuantifier:
+      break;
   }
   abort();
 }
@@ -748,6 +782,9 @@ Exp Partial(Exp exp, int byte) {
       }
       return Disjunction(subs, false);
     }
+
+    case kQuantifier:
+      break;
   }
   abort();
 }
@@ -797,6 +834,9 @@ Exp Epsilon(Exp exp) {
       }
       return Disjunction(subs, false);
     }
+
+    case kQuantifier:
+      break;
   }
   abort();
 }
@@ -937,6 +977,9 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
         }
       }
       return;
+
+    case kQuantifier:
+      break;
   }
   abort();
 }
@@ -985,6 +1028,13 @@ class WalkerBase {
     return Disjunction(subs, false);
   }
 
+  virtual Exp WalkQuantifier(Exp exp) {
+    Exp sub; int min; int max;
+    std::tie(sub, min, max) = exp->quantifier();
+    sub = Walk(sub);
+    return Quantifier(sub, min, max);
+  }
+
   Exp Walk(Exp exp) {
     switch (exp->kind()) {
       case kEmptySet:
@@ -1013,6 +1063,9 @@ class WalkerBase {
 
       case kDisjunction:
         return WalkDisjunction(exp);
+
+      case kQuantifier:
+        return WalkQuantifier(exp);
     }
     abort();
   }
@@ -1174,12 +1227,45 @@ class StripTagsWithinComplements : public WalkerBase {
   void operator=(const StripTagsWithinComplements&) = delete;
 };
 
+class ExpandQuantifiers : public WalkerBase {
+ public:
+  ExpandQuantifiers() {}
+  virtual ~ExpandQuantifiers() {}
+
+  virtual Exp WalkQuantifier(Exp exp) {
+    Exp sub; int min; int max;
+    std::tie(sub, min, max) = exp->quantifier();
+    sub = Walk(sub);
+    Exp tmp;
+    if (max == -1) {
+      tmp = KleeneClosure(sub);
+    }
+    while (max > min) {
+      tmp = tmp == nullptr ? sub : Concatenation(sub, tmp);
+      tmp = Disjunction(EmptyString(), tmp);
+      --max;
+    }
+    while (min > 0) {
+      tmp = tmp == nullptr ? sub : Concatenation(sub, tmp);
+      --min;
+    }
+    tmp = tmp == nullptr ? EmptyString() : tmp;
+    return tmp;
+  }
+
+ private:
+  //DISALLOW_COPY_AND_ASSIGN(ExpandQuantifiers);
+  ExpandQuantifiers(const ExpandQuantifiers&) = delete;
+  void operator=(const ExpandQuantifiers&) = delete;
+};
+
 bool Parse(llvm::StringRef str, Exp* exp) {
   redgrep_yy::Data yydata(str, exp);
   redgrep_yy::parser parser(&yydata);
   if (parser.parse() == 0) {
     *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
     *exp = StripTags().Walk(*exp);
+    *exp = ExpandQuantifiers().Walk(*exp);
     return true;
   }
   return false;
@@ -1194,6 +1280,7 @@ bool Parse(llvm::StringRef str, Exp* exp,
     *exp = ApplyTagsWithinDisjunctions().Walk(*exp);
     *exp = NumberTags(&yydata).Walk(*exp);
     *exp = StripTagsWithinComplements().Walk(*exp);
+    *exp = ExpandQuantifiers().Walk(*exp);
     return true;
   }
   return false;
@@ -1557,7 +1644,7 @@ static void LLVMOnce() {
   llvm->module_ = new llvm::Module("M", *llvm->context_);
   llvm->engine_ = llvm::EngineBuilder(llvm->module_).create();
   llvm->passes_ = new llvm::FunctionPassManager(llvm->module_);
-  llvm->passes_->add(new llvm::DataLayout(*llvm->engine_->getDataLayout()));
+  llvm->passes_->add(new llvm::DataLayoutPass(*llvm->engine_->getDataLayout()));
   llvm->passes_->add(llvm::createCodeGenPreparePass());
   llvm->passes_->add(llvm::createPromoteMemoryToRegisterPass());
   llvm->passes_->add(llvm::createLoopDeletionPass());

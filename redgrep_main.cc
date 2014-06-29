@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
         errx(2, "unmatched right parenthesis");
       }
     } else if (!escape && (arg == "!" || arg == "-not")) {
-      re_str += arg;
+      re_str += "!";
       complete = false;
     } else if (!escape && (arg == "&" || arg == "-a" || arg == "-and")) {
       re_str += "&";

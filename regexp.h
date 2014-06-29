@@ -24,6 +24,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -39,10 +40,12 @@ namespace redgrep {
 using std::bitset;
 using std::list;
 using std::make_pair;
+using std::make_tuple;
 using std::map;
 using std::multimap;
 using std::pair;
 using std::set;
+using std::tuple;
 using std::vector;
 
 // Implements regular expressions using Brzozowski derivatives, Antimirov
@@ -88,6 +91,7 @@ enum Kind {
   kComplement,
   kConjunction,
   kDisjunction,
+  kQuantifier,  // ephemeral
 };
 
 class Expression;
@@ -106,6 +110,7 @@ class Expression {
   Expression(Kind kind, const pair<int, int>& byte_range);
 #endif
   Expression(Kind kind, const list<Exp>& subexpressions, bool norm);
+  Expression(Kind kind, const tuple<Exp, int, int>& quantifier);
   virtual ~Expression();
 
   Kind kind() const { return kind_; }
@@ -118,6 +123,7 @@ class Expression {
   int byte() const;
   const pair<int, int>& byte_range() const;
   const list<Exp>& subexpressions() const;
+  const tuple<Exp, int, int>& quantifier() const;
 
   // A KleeneClosure or Complement expression has one subexpression.
   // Use sub() for convenience.
@@ -186,6 +192,7 @@ Exp Concatenation(const list<Exp>& subexpressions, bool norm);
 Exp Complement(const list<Exp>& subexpressions, bool norm);
 Exp Conjunction(const list<Exp>& subexpressions, bool norm);
 Exp Disjunction(const list<Exp>& subexpressions, bool norm);
+Exp Quantifier(const tuple<Exp, int, int>& quantifier);
 
 // num: -1: left parenthesis (capturing);
 //       0: left parenthesis (non-capturing);
@@ -226,6 +233,10 @@ inline Exp Conjunction(Exp x, Exp y, Variadic... z) {
 template <typename... Variadic>
 inline Exp Disjunction(Exp x, Exp y, Variadic... z) {
   return Disjunction({x, y, z...}, false);
+}
+
+inline Exp Quantifier(Exp sub, int min, int max) {
+  return Quantifier(make_tuple(sub, min, max));
 }
 
 Exp AnyCharacter();
