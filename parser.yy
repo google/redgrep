@@ -220,7 +220,7 @@ static bool Quantifier(Rune character,
   static const char kDigits[] = "0123456789";
   auto Number = [&input](int* output) -> bool {
     if (input->find_first_of(kDigits) == 0) {
-      int len = input->find_first_not_of(kDigits);
+      size_t len = input->find_first_not_of(kDigits);
       if (len != llvm::StringRef::npos && len <= 3) {
         sscanf(input->data(), "%d", output);
         *input = input->drop_front(len);

@@ -1509,7 +1509,7 @@ bool Match(const DFA& dfa, llvm::StringRef str) {
 static bool Precedes(const vector<int>& x,
                      const vector<int>& y,
                      const vector<int>& modes) {
-  for (int i = 0; i < modes.size(); ++i) {
+  for (size_t i = 0; i < modes.size(); ++i) {
     if (x[i] == y[i] ||
         // For passive mode, we continue if both are -1 or both are not -1.
         // Note that we don't bother checking if (x[i] == -1 && y[i] == -1)
@@ -1604,7 +1604,7 @@ bool Match(const TNFA& tnfa, llvm::StringRef str, vector<int>* values) {
     // Note that a TNFA should have exactly one accepting state.
     if (tnfa.IsAccepting(curr)) {
       values->resize(tnfa.groups_.size());
-      for (int j = 0; j < tnfa.groups_.size(); ++j) {
+      for (size_t j = 0; j < tnfa.groups_.size(); ++j) {
         (*values)[j] = i.second[tnfa.groups_[j]];
       }
       return true;

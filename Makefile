@@ -43,7 +43,10 @@ UTF =	utf/rune.o
 GTEST =	gtest/gtest-all.o gtest/gtest_main.o
 
 parser.tab.cc: parser.yy
-	$(YACC) $<
+	$(YACC.y) $<
+
+parser.tab.o: parser.tab.cc
+	$(COMPILE.cc) $(OUTPUT_OPTION) $<	-fexceptions
 
 regexp_test: regexp_test.o $(UTF) parser.tab.o regexp.o $(GTEST)
 
