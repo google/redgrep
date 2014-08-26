@@ -36,7 +36,7 @@ utf:
 
 gtest:
 	wget -m -np -q https://googletest.googlecode.com/svn/trunk/
-	python googletest.googlecode.com/svn/trunk/scripts/fuse_gtest_files.py .
+	python2 googletest.googlecode.com/svn/trunk/scripts/fuse_gtest_files.py .
 	ln -s ../googletest.googlecode.com/svn/trunk/src/gtest_main.cc gtest/
 
 UTF =	utf/rune.o

@@ -32,7 +32,10 @@
 #include "utf/utf.h"
 
 namespace llvm {
+class ExecutionEngine;
 class Function;
+class LLVMContext;
+class Module;
 }  // namespace llvm
 
 namespace redgrep {
@@ -366,11 +369,17 @@ bool Match(const DFA& dfa, llvm::StringRef str);
 bool Match(const TNFA& tnfa, llvm::StringRef str, vector<int>* values);
 
 // Represents a function and its machine code.
-// Note that neither the function nor the machine code is owned.
 struct Fun {
-  llvm::Function* function_;
-  void* machine_code_addr_;
-  size_t machine_code_size_;
+  Fun();
+  ~Fun();
+
+  std::unique_ptr<llvm::LLVMContext> context_;
+  llvm::Module* module_;  // Not owned.
+  std::unique_ptr<llvm::ExecutionEngine> engine_;
+  llvm::Function* function_;  // Not owned.
+
+  uint64_t machine_code_addr_;
+  uint64_t machine_code_size_;
 };
 
 // Outputs the function compiled from dfa.
@@ -379,9 +388,6 @@ size_t Compile(const DFA& dfa, Fun* fun);
 
 // Returns the result of matching str using fun.
 bool Match(const Fun& fun, llvm::StringRef str);
-
-// Deletes the internal state for fun.
-void Delete(const Fun& fun);
 
 }  // namespace redgrep
 

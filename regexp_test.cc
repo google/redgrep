@@ -1279,11 +1279,14 @@ TEST_F(MatchTest, EmptyString) {
   EXPECT_MATCH(false, vector<int>({}), "a");
 }
 
-TEST_F(MatchTest, EscapeSequences) {
+TEST_F(MatchTest, EscapeSequences_1) {
   ParseAll("(\\C)");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(true, vector<int>({0, 1}), "a");
+}
+
+TEST_F(MatchTest, EscapeSequences_2) {
   ParseAll("(\\f\\n\\r\\t)");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "fnrt");
@@ -1301,22 +1304,31 @@ TEST_F(MatchTest, AnyCharacter) {
   EXPECT_MATCH(true, vector<int>({0, 4}), "💩");
 }
 
-TEST_F(MatchTest, Character) {
+TEST_F(MatchTest, Character_1) {
   ParseAll("(a)");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(true, vector<int>({0, 1}), "a");
   EXPECT_MATCH(false, vector<int>({}), "X");
+}
+
+TEST_F(MatchTest, Character_2) {
   ParseAll("(¬)");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(true, vector<int>({0, 2}), "¬");
   EXPECT_MATCH(false, vector<int>({}), "X");
+}
+
+TEST_F(MatchTest, Character_3) {
   ParseAll("(兔)");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(true, vector<int>({0, 3}), "兔");
   EXPECT_MATCH(false, vector<int>({}), "X");
+}
+
+TEST_F(MatchTest, Character_4) {
   ParseAll("(💩)");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
@@ -1324,7 +1336,7 @@ TEST_F(MatchTest, Character) {
   EXPECT_MATCH(false, vector<int>({}), "X");
 }
 
-TEST_F(MatchTest, CharacterClass) {
+TEST_F(MatchTest, CharacterClass_1) {
   ParseAll("([a¬兔💩])");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
@@ -1333,6 +1345,9 @@ TEST_F(MatchTest, CharacterClass) {
   EXPECT_MATCH(true, vector<int>({0, 3}), "兔");
   EXPECT_MATCH(true, vector<int>({0, 4}), "💩");
   EXPECT_MATCH(false, vector<int>({}), "X");
+}
+
+TEST_F(MatchTest, CharacterClass_2) {
   ParseAll("([^a¬兔💩])");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
@@ -1343,109 +1358,160 @@ TEST_F(MatchTest, CharacterClass) {
   EXPECT_MATCH(true, vector<int>({0, 1}), "X");
 }
 
-TEST_F(MatchTest, Quantifiers) {
+TEST_F(MatchTest, Quantifiers_1) {
   ParseAll("(a*)");
   CompileAll();
   EXPECT_MATCH(true, vector<int>({0, 0}), "");
   EXPECT_MATCH(true, vector<int>({0, 1}), "a");
   EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 3}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_2) {
   ParseAll("(a*)(a*)");
   CompileAll();
   EXPECT_MATCH(true, vector<int>({0, 0, 0, 0}), "");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 1}), "a");
   EXPECT_MATCH(true, vector<int>({0, 2, 2, 2}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 3, 3, 3}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_3) {
   ParseAll("(a*?)(a*)");
   CompileAll();
   EXPECT_MATCH(true, vector<int>({0, 0, 0, 0}), "");
   EXPECT_MATCH(true, vector<int>({0, 0, 0, 1}), "a");
   EXPECT_MATCH(true, vector<int>({0, 0, 0, 2}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 0, 0, 3}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_4) {
   ParseAll("(a+)");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(true, vector<int>({0, 1}), "a");
   EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 3}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_5) {
   ParseAll("(a+)(a+)");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(false, vector<int>({}), "a");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 2, 2, 3}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_6) {
   ParseAll("(a+?)(a+)");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(false, vector<int>({}), "a");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 3}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_7) {
   ParseAll("(a?)");
   CompileAll();
   EXPECT_MATCH(true, vector<int>({0, 0}), "");
   EXPECT_MATCH(true, vector<int>({0, 1}), "a");
   EXPECT_MATCH(false, vector<int>({}), "aa");
   EXPECT_MATCH(false, vector<int>({}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_8) {
   ParseAll("(a?)(a?)");
   CompileAll();
   EXPECT_MATCH(true, vector<int>({0, 0, 0, 0}), "");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 1}), "a");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
   EXPECT_MATCH(false, vector<int>({}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_9) {
   ParseAll("(a?""?)(a?)");  // Avoid trigraph.
   CompileAll();
   EXPECT_MATCH(true, vector<int>({0, 0, 0, 0}), "");
   EXPECT_MATCH(true, vector<int>({0, 0, 0, 1}), "a");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
   EXPECT_MATCH(false, vector<int>({}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_10) {
   ParseAll("(a{1})");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(true, vector<int>({0, 1}), "a");
   EXPECT_MATCH(false, vector<int>({}), "aa");
   EXPECT_MATCH(false, vector<int>({}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_11) {
   ParseAll("(a{1})(a{1})");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(false, vector<int>({}), "a");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
   EXPECT_MATCH(false, vector<int>({}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_12) {
   ParseAll("(a{1}?)(a{1})");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(false, vector<int>({}), "a");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
   EXPECT_MATCH(false, vector<int>({}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_13) {
   ParseAll("(a{1,})");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(true, vector<int>({0, 1}), "a");
   EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 3}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_14) {
   ParseAll("(a{1,})(a{1,})");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(false, vector<int>({}), "a");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 2, 2, 3}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_15) {
   ParseAll("(a{1,}?)(a{1,})");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(false, vector<int>({}), "a");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 3}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_16) {
   ParseAll("(a{1,2})");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(true, vector<int>({0, 1}), "a");
   EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
   EXPECT_MATCH(false, vector<int>({}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_17) {
   ParseAll("(a{1,2})(a{1,2})");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");
   EXPECT_MATCH(false, vector<int>({}), "a");
   EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 2, 2, 3}), "aaa");
+}
+
+TEST_F(MatchTest, Quantifiers_18) {
   ParseAll("(a{1,2}?)(a{1,2})");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "");

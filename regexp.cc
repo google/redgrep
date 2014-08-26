@@ -15,7 +15,6 @@
 #include "regexp.h"
 
 #include <pthread.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 #include <bitset>
@@ -27,26 +26,26 @@
 #include <vector>
 
 #include "llvm/ADT/StringRef.h"
-#include "llvm/CodeGen/Passes.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
-#include "llvm/ExecutionEngine/JIT.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
+#include "llvm/ExecutionEngine/MCJIT.h"
+#include "llvm/ExecutionEngine/ObjectImage.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/TypeBuilder.h"
-#include "llvm/PassManager.h"
+#include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/Mutex.h"
-#include "llvm/Support/MutexGuard.h"
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "parser.tab.hh"
 #include "utf/utf.h"
 
@@ -1195,8 +1194,7 @@ class ApplyTagsWithinDisjunctions : public WalkerBase {
 
 class NumberTags : public WalkerBase {
  public:
-  explicit NumberTags(redgrep_yy::Data* yydata)
-      : yydata_(yydata) {}
+  explicit NumberTags(redgrep_yy::Data* yydata) : yydata_(yydata) {}
   virtual ~NumberTags() {}
 
   virtual Exp WalkTag(Exp exp) {
@@ -1624,77 +1622,57 @@ class TypeBuilder<bool, false> : public TypeBuilder<types::i<1>, false> {};
 
 namespace redgrep {
 
-struct LLVM {
-  llvm::sys::Mutex mutex_;
-  llvm::LLVMContext* context_;
-  llvm::Module* module_;
-  llvm::ExecutionEngine* engine_;
-  llvm::FunctionPassManager* passes_;
-  int i_;  // monotonic counter, used for names
-};
+static pthread_once_t once = PTHREAD_ONCE_INIT;
 
-static pthread_once_t llvm_once = PTHREAD_ONCE_INIT;
-static LLVM* llvm_singleton;
-
-static void LLVMOnce() {
+static void InitializeNativeTarget() {
   llvm::InitializeNativeTarget();
-
-  LLVM* llvm = new LLVM;
-  llvm->context_ = new llvm::LLVMContext;
-  llvm->module_ = new llvm::Module("M", *llvm->context_);
-  llvm->engine_ = llvm::EngineBuilder(llvm->module_).create();
-  llvm->passes_ = new llvm::FunctionPassManager(llvm->module_);
-  llvm->passes_->add(new llvm::DataLayoutPass(*llvm->engine_->getDataLayout()));
-  llvm->passes_->add(llvm::createCodeGenPreparePass());
-  llvm->passes_->add(llvm::createPromoteMemoryToRegisterPass());
-  llvm->passes_->add(llvm::createLoopDeletionPass());
-  llvm->i_ = 0;
-
-  llvm_singleton = llvm;
-}
-
-static LLVM* GetLLVMSingleton() {
-  pthread_once(&llvm_once, &LLVMOnce);
-  return llvm_singleton;
+  llvm::InitializeNativeTargetAsmPrinter();
+  llvm::InitializeNativeTargetAsmParser();
 }
 
 typedef bool NativeMatch(const char*, int);
 
+Fun::Fun() {
+  pthread_once(&once, &InitializeNativeTarget);
+  context_.reset(new llvm::LLVMContext);
+  module_ = new llvm::Module("M", *context_);
+  engine_.reset(llvm::EngineBuilder(std::unique_ptr<llvm::Module>(module_))
+                    .setUseMCJIT(true)
+                    .create());
+  function_ = llvm::Function::Create(
+      llvm::TypeBuilder<NativeMatch, false>::get(*context_),
+      llvm::GlobalValue::ExternalLinkage, "F", module_);
+}
+
+Fun::~Fun() {}
+
 // Generates the function for the DFA.
 static void GenerateFunction(const DFA& dfa, Fun* fun) {
-  LLVM* llvm = GetLLVMSingleton();
-  llvm::LLVMContext& context = *llvm->context_;
-  llvm::Module* module = llvm->module_;
-  char buf[64];  // scratch space, used for names
-
-  // Create the Function.
-  snprintf(buf, sizeof buf, "F%d", llvm->i_++);
-  llvm::Function* function = llvm::Function::Create(
-      llvm::TypeBuilder<NativeMatch, false>::get(context),
-      llvm::GlobalValue::ExternalLinkage, buf, module);
+  llvm::LLVMContext& context = *fun->context_;  // for convenience
+  llvm::IRBuilder<> bb(context);
 
   // Create the entry BasicBlock and two automatic variables, then store the
   // Function Arguments in the automatic variables.
-  llvm::BasicBlock* entry = llvm::BasicBlock::Create(
-      context, "entry", function);
-  llvm::IRBuilder<> bb(entry);
+  llvm::BasicBlock* entry =
+      llvm::BasicBlock::Create(context, "entry", fun->function_);
+  bb.SetInsertPoint(entry);
   llvm::AllocaInst* data = bb.CreateAlloca(
       llvm::TypeBuilder<const char*, false>::get(context), 0, "data");
   llvm::AllocaInst* size = bb.CreateAlloca(
       llvm::TypeBuilder<int, false>::get(context), 0, "size");
-  llvm::Function::arg_iterator arg = function->arg_begin();
+  llvm::Function::arg_iterator arg = fun->function_->arg_begin();
   bb.CreateStore(arg++, data);
   bb.CreateStore(arg++, size);
 
   // Create a BasicBlock that returns true.
-  llvm::BasicBlock* return_true = llvm::BasicBlock::Create(
-      context, "return_true", function);
+  llvm::BasicBlock* return_true =
+      llvm::BasicBlock::Create(context, "return_true", fun->function_);
   bb.SetInsertPoint(return_true);
   bb.CreateRet(bb.getTrue());
 
   // Create a BasicBlock that returns false.
-  llvm::BasicBlock* return_false = llvm::BasicBlock::Create(
-      context, "return_false", function);
+  llvm::BasicBlock* return_false =
+      llvm::BasicBlock::Create(context, "return_false", fun->function_);
   bb.SetInsertPoint(return_false);
   bb.CreateRet(bb.getFalse());
 
@@ -1704,8 +1682,10 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
   vector<pair<llvm::BasicBlock*, llvm::BasicBlock*>> states;
   states.reserve(dfa.accepting_.size());
   for (const auto& i : dfa.accepting_) {
-    llvm::BasicBlock* bb0 = llvm::BasicBlock::Create(context, "", function);
-    llvm::BasicBlock* bb1 = llvm::BasicBlock::Create(context, "", function);
+    llvm::BasicBlock* bb0 =
+        llvm::BasicBlock::Create(context, "", fun->function_);
+    llvm::BasicBlock* bb1 =
+        llvm::BasicBlock::Create(context, "", fun->function_);
 
     bb.SetInsertPoint(bb0);
     bb.CreateCondBr(
@@ -1747,24 +1727,37 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
   bb.SetInsertPoint(entry);
   bb.CreateBr(states[0].first);
 
-  // Run the transform passes.
-  llvm->passes_->run(*function);
-  fun->function_ = function;
+  // Use the default optimisations.
+  llvm::PassManagerBuilder opt;
+
+  // Optimise the function.
+  llvm::legacy::FunctionPassManager fpm(fun->module_);
+  opt.populateFunctionPassManager(fpm);
+  fpm.run(*fun->function_);
+
+  // Optimise the module.
+  llvm::legacy::PassManager mpm;
+  opt.populateModulePassManager(mpm);
+  mpm.run(*fun->module_);
 }
 
 // This seems to be the only way to discover the machine code size.
 class DiscoverMachineCodeSize : public llvm::JITEventListener {
  public:
-  explicit DiscoverMachineCodeSize(Fun* fun)
-      : fun_(fun) {}
+  explicit DiscoverMachineCodeSize(Fun* fun) : fun_(fun) {}
   virtual ~DiscoverMachineCodeSize() {}
 
-  virtual void NotifyFunctionEmitted(const llvm::Function&,
-                                     void* addr,
-                                     size_t size,
-                                     const EmittedFunctionDetails&) {
-    fun_->machine_code_addr_ = addr;
-    fun_->machine_code_size_ = size;
+  virtual void NotifyObjectEmitted(const llvm::ObjectImage& object) {
+    for (const llvm::object::SymbolRef& symbol : object.symbols()) {
+      llvm::StringRef name;
+      symbol.getName(name);
+      if (name == "F") {
+        symbol.getAddress(fun_->machine_code_addr_);
+        symbol.getSize(fun_->machine_code_size_);
+        return;
+      }
+    }
+    abort();
   }
 
  private:
@@ -1777,16 +1770,13 @@ class DiscoverMachineCodeSize : public llvm::JITEventListener {
 
 // Generates the machine code for the function.
 static void GenerateMachineCode(Fun* fun) {
-  LLVM* llvm = GetLLVMSingleton();
   DiscoverMachineCodeSize dmcs(fun);
-  llvm->engine_->RegisterJITEventListener(&dmcs);
-  llvm->engine_->getPointerToFunction(fun->function_);
-  llvm->engine_->UnregisterJITEventListener(&dmcs);
+  fun->engine_->RegisterJITEventListener(&dmcs);
+  fun->engine_->finalizeObject();
+  fun->engine_->UnregisterJITEventListener(&dmcs);
 }
 
 size_t Compile(const DFA& dfa, Fun* fun) {
-  LLVM* llvm = GetLLVMSingleton();
-  llvm::MutexGuard guard(llvm->mutex_);
   GenerateFunction(dfa, fun);
   GenerateMachineCode(fun);
   return fun->machine_code_size_;
@@ -1795,13 +1785,6 @@ size_t Compile(const DFA& dfa, Fun* fun) {
 bool Match(const Fun& fun, llvm::StringRef str) {
   NativeMatch* match = reinterpret_cast<NativeMatch*>(fun.machine_code_addr_);
   return (*match)(str.data(), str.size());
-}
-
-void Delete(const Fun& fun) {
-  LLVM* llvm = GetLLVMSingleton();
-  llvm::MutexGuard guard(llvm->mutex_);
-  llvm->engine_->freeMachineCodeForFunction(fun.function_);
-  fun.function_->eraseFromParent();
 }
 
 }  // namespace redgrep

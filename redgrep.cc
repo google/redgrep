@@ -24,11 +24,7 @@ RED::RED(llvm::StringRef str) {
   }
 }
 
-RED::~RED() {
-  if (ok()) {
-    redgrep::Delete(fun_);
-  }
-}
+RED::~RED() {}
 
 bool RED::FullMatch(llvm::StringRef str, const RED& re) {
   return redgrep::Match(re.fun_, str);
