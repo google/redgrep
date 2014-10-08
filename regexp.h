@@ -52,7 +52,7 @@ using std::tuple;
 using std::vector;
 
 // Implements regular expressions using Brzozowski derivatives, Antimirov
-// partial derivatives and Laurikari tagged transitions.
+// partial derivatives, Sulzmann submatches and Laurikari tagged transitions.
 //
 // References
 // ----------
@@ -77,6 +77,11 @@ using std::vector;
 // Language and Automata Theory and Applications 2011, pp. 179-191, May 2011
 // http://dl.acm.org/citation.cfm?id=2022911
 //
+// "A Flexible and Efficient ML Lexer Tool Based on Extended Regular Expression Submatching"
+// Martin Sulzmann, Pippijn van Steenhoven
+// Compiler Construction 2014, pp. 174-191, April 2014
+// http://dx.doi.org/10.1007/978-3-642-54807-9_10
+//
 // "Efficient submatch addressing for regular expressions"
 // Ville Laurikari
 // Master's Thesis, November 2001
@@ -85,7 +90,7 @@ using std::vector;
 enum Kind {
   kEmptySet,
   kEmptyString,
-  kTag,
+  kGroup,
   kAnyByte,
   kByte,
   kByteRange,
@@ -94,7 +99,14 @@ enum Kind {
   kComplement,
   kConjunction,
   kDisjunction,
-  kQuantifier,  // ephemeral
+  kCharacterClass,  // ephemeral
+  kQuantifier,      // ephemeral
+};
+
+enum Mode {
+  kMinimal,
+  kPassive,
+  kMaximal,
 };
 
 class Expression;
@@ -106,15 +118,13 @@ typedef std::shared_ptr<Expression> Exp;
 class Expression {
  public:
   explicit Expression(Kind kind);
-  Expression(Kind kind, const pair<int, int>& tag);
+  Expression(Kind kind, const tuple<int, Exp, Mode, bool>& group);
   Expression(Kind kind, int byte);
-#if 0
-  // This is identical to the Tag constructor.
   Expression(Kind kind, const pair<int, int>& byte_range);
-#endif
   Expression(Kind kind, const list<Exp>& subexpressions, bool norm);
+  Expression(Kind kind, const pair<set<Rune>, bool>& character_class);
   Expression(Kind kind, const tuple<Exp, int, int>& quantifier);
-  virtual ~Expression();
+  ~Expression();
 
   Kind kind() const { return kind_; }
   intptr_t data() const { return data_; }
@@ -122,10 +132,11 @@ class Expression {
 
   // Accessors for the expression data. Of course, if you call the wrong
   // function for the expression kind, you're gonna have a bad time.
-  const pair<int, int>& tag() const;
+  const tuple<int, Exp, Mode, bool>& group() const;
   int byte() const;
   const pair<int, int>& byte_range() const;
   const list<Exp>& subexpressions() const;
+  const pair<set<Rune>, bool>& character_class() const;
   const tuple<Exp, int, int>& quantifier() const;
 
   // A KleeneClosure or Complement expression has one subexpression.
@@ -186,7 +197,7 @@ namespace redgrep {
 
 Exp EmptySet();
 Exp EmptyString();
-Exp Tag(const pair<int, int>& tag);
+Exp Group(const tuple<int, Exp, Mode, bool>& group);
 Exp AnyByte();
 Exp Byte(int byte);
 Exp ByteRange(const pair<int, int>& byte_range);
@@ -195,16 +206,11 @@ Exp Concatenation(const list<Exp>& subexpressions, bool norm);
 Exp Complement(const list<Exp>& subexpressions, bool norm);
 Exp Conjunction(const list<Exp>& subexpressions, bool norm);
 Exp Disjunction(const list<Exp>& subexpressions, bool norm);
+Exp CharacterClass(const pair<set<Rune>, bool>& character_class);
 Exp Quantifier(const tuple<Exp, int, int>& quantifier);
 
-// num: -1: left parenthesis (capturing);
-//       0: left parenthesis (non-capturing);
-//       1: right parenthesis.
-// mode: -1: minimal;
-//        0: passive;
-//        1: maximal.
-inline Exp Tag(int num, int mode) {
-  return Tag(make_pair(num, mode));
+inline Exp Group(int num, Exp sub, Mode mode, bool capture) {
+  return Group(make_tuple(num, sub, mode, capture));
 }
 
 inline Exp ByteRange(int min, int max) {
@@ -238,13 +244,16 @@ inline Exp Disjunction(Exp x, Exp y, Variadic... z) {
   return Disjunction({x, y, z...}, false);
 }
 
+inline Exp CharacterClass(const set<Rune>& characters, bool complement) {
+  return CharacterClass(make_pair(characters, complement));
+}
+
 inline Exp Quantifier(Exp sub, int min, int max) {
   return Quantifier(make_tuple(sub, min, max));
 }
 
 Exp AnyCharacter();
 Exp Character(Rune character);
-Exp CharacterClass(const set<Rune>& character_class);
 
 // Returns the normalised form of exp.
 Exp Normalised(Exp exp);
@@ -256,14 +265,31 @@ bool IsNullable(Exp exp);
 // Returns the derivative of exp with respect to byte.
 Exp Derivative(Exp exp, int byte);
 
-// Returns the partial derivative of exp with respect to byte.
-Exp Partial(Exp exp, int byte);
+enum BindingType {
+  kCancel,
+  kEpsilon,
+  kAppend,
+};
 
-// Returns the ε-closure of exp.
-// For example, the ε-closure of “a*b” is “b|aa*b” because “a*” is nullable
-// and thus “b” is reachable via an ε-transition and because unrolling “a*”
-// to “aa*” is also possible.
-Exp Epsilon(Exp exp);
+typedef pair<int, BindingType> Binding;
+
+// Conceptually, an OuterSet is a Disjunction and an InnerSet is a Conjunction.
+// For simplicity, we don't introduce a new type for the latter, but the former
+// needs to associate each InnerSet with its Bindings.
+typedef list<pair<Exp, list<Binding>>> OuterSet;
+typedef std::unique_ptr<OuterSet> Outer;
+
+// Returns the denormalised form of exp.
+Outer Denormalised(Exp exp);
+
+// Partial() helpers for building OuterSets. Exposed for ease of testing.
+Outer PartialConcatenation(Outer x, Exp y, const list<Binding>& initial);
+Outer PartialComplement(Outer x);
+Outer PartialConjunction(Outer x, Outer y);
+Outer PartialDisjunction(Outer x, Outer y);
+
+// Returns the partial derivative of exp with respect to byte.
+Outer Partial(Exp exp, int byte);
 
 // Outputs the partitions computed for exp.
 // The first partition should be Σ-based. Any others should be ∅-based.
@@ -273,11 +299,11 @@ void Partitions(Exp exp, list<bitset<256>>* partitions);
 // Returns true on success, false on failure.
 bool Parse(llvm::StringRef str, Exp* exp);
 
-// Outputs the expression parsed from str as well as the mode of each tag and
-// which pairs of tags enclose capturing groups.
+// Outputs the expression parsed from str as well as the mode of each Group and
+// which Groups capture.
 // Returns true on success, false on failure.
 bool Parse(llvm::StringRef str, Exp* exp,
-           vector<int>* modes, vector<int>* groups);
+           vector<Mode>* modes, vector<int>* captures);
 
 // Returns the result of matching str using exp.
 bool Match(Exp exp, llvm::StringRef str);
@@ -285,38 +311,20 @@ bool Match(Exp exp, llvm::StringRef str);
 // Represents a finite automaton.
 class FA {
  public:
-  FA() {}
+  FA() : error_(-1) {}
   virtual ~FA() {}
-
-  void Clear() {
-    error_ = -1;
-    accepting_.clear();
-    transition_.clear();
-    epsilon_.clear();
-  }
 
   bool IsError(int state) const {
     return state == error_;
   }
 
   bool IsAccepting(int state) const {
-    return accepting_.at(state);
-  }
-
-  bool HasTransition(int state) const {
-    auto transition = transition_.find(make_pair(state, -1));
-    return transition != transition_.end();
-  }
-
-  bool HasEpsilon(int state) const {
-    auto epsilon = epsilon_.lower_bound(state);
-    return epsilon != epsilon_.upper_bound(state);
+    return accepting_.find(state)->second;
   }
 
   int error_;
   map<int, bool> accepting_;
-  map<pair<int, int>, int> transition_;
-  multimap<int, pair<int, set<int>>> epsilon_;
+  map<int, list<bitset<256>>> partitions_;
 
  private:
   //DISALLOW_COPY_AND_ASSIGN(FA);
@@ -325,11 +333,12 @@ class FA {
 };
 
 // Represents a deterministic finite automaton.
-// accepting_ and transition_ will be populated.
 class DFA : public FA {
  public:
   DFA() {}
-  virtual ~DFA() {}
+  ~DFA() override {}
+
+  map<pair<int, int>, int> transition_;
 
  private:
   //DISALLOW_COPY_AND_ASSIGN(DFA);
@@ -338,14 +347,16 @@ class DFA : public FA {
 };
 
 // Represents a tagged nondeterministic finite automaton.
-// accepting_, transition_ and epsilon_ will be populated.
 class TNFA : public FA {
  public:
   TNFA() {}
-  virtual ~TNFA() {}
+  ~TNFA() override {}
 
-  vector<int> modes_;
-  vector<int> groups_;
+  vector<Mode> modes_;
+  vector<int> captures_;
+
+  multimap<pair<int, int>, pair<int, list<Binding>>> transition_;
+  map<int, list<Binding>> final_;
 
  private:
   //DISALLOW_COPY_AND_ASSIGN(TNFA);
@@ -365,8 +376,10 @@ size_t Compile(Exp exp, TNFA* tnfa);
 bool Match(const DFA& dfa, llvm::StringRef str);
 
 // Returns the result of matching str using tnfa.
-// Outputs the value of each tag that encloses a capturing group.
-bool Match(const TNFA& tnfa, llvm::StringRef str, vector<int>* values);
+// Outputs the offsets of the beginning and ending of each Group that captures.
+// Thus, the nth Group begins at offsets[2*n+0] and ends at offsets[2*n+1].
+bool Match(const TNFA& tnfa, llvm::StringRef str,
+           vector<int>* offsets);
 
 // Represents a function and its machine code.
 struct Fun {
@@ -377,6 +390,9 @@ struct Fun {
   llvm::Module* module_;  // Not owned.
   std::unique_ptr<llvm::ExecutionEngine> engine_;
   llvm::Function* function_;  // Not owned.
+
+  int memchr_byte_;
+  bool memchr_fail_;
 
   uint64_t machine_code_addr_;
   uint64_t machine_code_size_;

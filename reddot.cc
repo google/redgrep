@@ -20,6 +20,7 @@
 #include <list>
 #include <map>
 #include <set>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -27,9 +28,11 @@
 
 using std::list;
 using std::make_pair;
+using std::make_tuple;
 using std::map;
 using std::pair;
 using std::set;
+using std::tuple;
 using std::vector;
 
 static void EmitHeader() {
@@ -42,7 +45,7 @@ static void EmitState(int curr, const char* fillcolor) {
   printf("\n");
 }
 
-static void EmitTransition(int curr, int byte, int next) {
+static void EmitTransition(int curr, int next, int byte) {
   printf("s%d -> s%d [label=\"", curr, next);
   if (byte == -1) {
     printf("\" style=dashed]");
@@ -52,18 +55,9 @@ static void EmitTransition(int curr, int byte, int next) {
   printf("\n");
 }
 
-static void EmitTransition(int curr, int begin, int end, int next) {
+static void EmitTransition(int curr, int next, int begin, int end) {
   printf("s%d -> s%d [label=\"", curr, next);
   printf("%02X-%02X\"]", begin, end);
-  printf("\n");
-}
-
-static void EmitEpsilon(int curr, int next, const set<int>& tags) {
-  printf("s%d -> s%d [label=\"", curr, next);
-  for (int tag : tags) {
-    printf("%d ", tag);
-  }
-  printf("\" style=dotted]");
   printf("\n");
 }
 
@@ -71,7 +65,8 @@ static void EmitFooter() {
   printf("}\n");
 }
 
-inline void HandleImpl(int nstates, const redgrep::FA& fa) {
+inline void HandleImpl(int nstates, const redgrep::FA& fa,
+                       const set<tuple<int, int, int>>& transition_set) {
   EmitHeader();
   for (int i = 0; i < nstates; ++i) {
     int curr = i;
@@ -81,36 +76,17 @@ inline void HandleImpl(int nstates, const redgrep::FA& fa) {
     } else if (fa.IsAccepting(curr)) {
       // This is an accepting state.
       EmitState(curr, "green");
-    } else if (fa.HasTransition(curr)) {
-      // This is a real state.
-      auto transition = fa.transition_.find(make_pair(curr, -1));
-      if (transition->second == fa.error_) {
-        ++transition;
-        if (transition == fa.transition_.end() ||
-            transition->first.first != curr) {
-          // This is a junk state.
-          continue;
-        }
-      }
-      EmitState(curr, "white");
-    } else if (fa.HasEpsilon(curr)) {
-      // This is a glue state.
-      EmitState(curr, "grey");
     } else {
-      // This is a junk state.
-      continue;
+      // This is a normal state.
+      EmitState(curr, "white");
     }
   }
   map<pair<int, int>, list<pair<int, int>>> transition_map;
-  for (const auto& i : fa.transition_) {
-    int curr = i.first.first;
-    int byte = i.first.second;
-    int next = i.second;
+  for (const auto& i : transition_set) {
+    int curr; int next; int byte;
+    std::tie(curr, next, byte) = i;
     if (byte == -1) {
-      if (fa.IsError(next)) {
-        continue;
-      }
-      EmitTransition(curr, byte, next);
+      EmitTransition(curr, next, byte);
     } else {
       auto& range_list = transition_map[make_pair(curr, next)];
       if (range_list.empty() ||
@@ -129,17 +105,11 @@ inline void HandleImpl(int nstates, const redgrep::FA& fa) {
       int begin = j.first;
       int end = j.second;
       if (begin == end) {
-        EmitTransition(curr, begin, next);
+        EmitTransition(curr, next, begin);
       } else {
-        EmitTransition(curr, begin, end, next);
+        EmitTransition(curr, next, begin, end);
       }
     }
-  }
-  for (const auto& i : fa.epsilon_) {
-    int curr = i.first;
-    int next = i.second.first;
-    const set<int>& tags = i.second.second;
-    EmitEpsilon(curr, next, tags);
   }
   EmitFooter();
 }
@@ -151,17 +121,36 @@ static void HandleDFA(const char* str) {
     errx(1, "parse error");
   }
   int nstates = redgrep::Compile(exp, &dfa);
-  HandleImpl(nstates, dfa);
+  set<tuple<int, int, int>> transition_set;
+  for (const auto& i : dfa.transition_) {
+    int curr = i.first.first;
+    int byte = i.first.second;
+    int next = i.second;
+    if (!dfa.IsError(next)) {
+      transition_set.insert(make_tuple(curr, next, byte));
+    }
+  }
+  HandleImpl(nstates, dfa, transition_set);
 }
 
 static void HandleTNFA(const char* str) {
   redgrep::Exp exp;
   redgrep::TNFA tnfa;
-  if (!redgrep::Parse(str, &exp, &tnfa.modes_, &tnfa.groups_)) {
+  if (!redgrep::Parse(str, &exp, &tnfa.modes_, &tnfa.captures_)) {
     errx(1, "parse error");
   }
   int nstates = redgrep::Compile(exp, &tnfa);
-  HandleImpl(nstates, tnfa);
+  set<tuple<int, int, int>> transition_set;
+  for (const auto& i : tnfa.transition_) {
+    int curr = i.first.first;
+    int byte = i.first.second;
+    int next = i.second.first;
+    // TODO(junyer): Bindings?
+    if (!tnfa.IsError(next)) {
+      transition_set.insert(make_tuple(curr, next, byte));
+    }
+  }
+  HandleImpl(nstates, tnfa, transition_set);
 }
 
 int main(int argc, char** argv) {

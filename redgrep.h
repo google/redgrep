@@ -23,7 +23,7 @@
 class RED {
  public:
   explicit RED(llvm::StringRef str);
-  virtual ~RED();
+  ~RED();
 
   // Returns true if the RED object is usable, false otherwise.
   // TODO(junyer): Plumb and expose errors from the parser.

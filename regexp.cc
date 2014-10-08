@@ -16,6 +16,7 @@
 
 #include <pthread.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <bitset>
 #include <list>
@@ -61,37 +62,41 @@ using std::set;
 using std::tuple;
 using std::vector;
 
+#define TO_INTPTR_T(ptr) reinterpret_cast<intptr_t>(ptr)
+
 Expression::Expression(Kind kind)
     : kind_(kind),
       data_(0),
       norm_(true) {}
 
-Expression::Expression(Kind kind, const pair<int, int>& tag)
+Expression::Expression(Kind kind, const tuple<int, Exp, Mode, bool>& group)
     : kind_(kind),
-      data_(reinterpret_cast<intptr_t>(new pair<int, int>(tag))),
-      norm_(true) {}
+      data_(TO_INTPTR_T((new tuple<int, Exp, Mode, bool>(group)))),
+      norm_(false) {}
 
 Expression::Expression(Kind kind, int byte)
     : kind_(kind),
       data_(byte),
       norm_(true) {}
 
-#if 0
-// This is identical to the Tag constructor.
 Expression::Expression(Kind kind, const pair<int, int>& byte_range)
     : kind_(kind),
-      data_(reinterpret_cast<intptr_t>(new pair<int, int>(byte_range))),
+      data_(TO_INTPTR_T((new pair<int, int>(byte_range)))),
       norm_(true) {}
-#endif
 
 Expression::Expression(Kind kind, const list<Exp>& subexpressions, bool norm)
     : kind_(kind),
-      data_(reinterpret_cast<intptr_t>(new list<Exp>(subexpressions))),
+      data_(TO_INTPTR_T((new list<Exp>(subexpressions)))),
       norm_(norm) {}
+
+Expression::Expression(Kind kind, const pair<set<Rune>, bool>& character_class)
+    : kind_(kind),
+      data_(TO_INTPTR_T((new pair<set<Rune>, bool>(character_class)))),
+      norm_(false) {}
 
 Expression::Expression(Kind kind, const tuple<Exp, int, int>& quantifier)
     : kind_(kind),
-      data_(reinterpret_cast<intptr_t>(new tuple<Exp, int, int>(quantifier))),
+      data_(TO_INTPTR_T((new tuple<Exp, int, int>(quantifier)))),
       norm_(false) {}
 
 Expression::~Expression() {
@@ -100,8 +105,8 @@ Expression::~Expression() {
     case kEmptyString:
       break;
 
-    case kTag:
-      delete reinterpret_cast<pair<int, int>*>(data());
+    case kGroup:
+      delete reinterpret_cast<tuple<int, Exp, Mode, bool>*>(data());
       break;
 
     case kAnyByte:
@@ -122,14 +127,18 @@ Expression::~Expression() {
       delete reinterpret_cast<list<Exp>*>(data());
       break;
 
+    case kCharacterClass:
+      delete reinterpret_cast<pair<set<Rune>, bool>*>(data());
+      break;
+
     case kQuantifier:
       delete reinterpret_cast<tuple<Exp, int, int>*>(data());
       break;
   }
 }
 
-const pair<int, int>& Expression::tag() const {
-  return *reinterpret_cast<pair<int, int>*>(data());
+const tuple<int, Exp, Mode, bool>& Expression::group() const {
+  return *reinterpret_cast<tuple<int, Exp, Mode, bool>*>(data());
 }
 
 int Expression::byte() const {
@@ -142,6 +151,10 @@ const pair<int, int>& Expression::byte_range() const {
 
 const list<Exp>& Expression::subexpressions() const {
   return *reinterpret_cast<list<Exp>*>(data());
+}
+
+const pair<set<Rune>, bool>& Expression::character_class() const {
+  return *reinterpret_cast<pair<set<Rune>, bool>*>(data());
 }
 
 const tuple<Exp, int, int>& Expression::quantifier() const {
@@ -160,11 +173,11 @@ int Compare(Exp x, Exp y) {
     case kEmptyString:
       return 0;
 
-    case kTag:
-      if (x->tag() < y->tag()) {
+    case kGroup:
+      if (x->group() < y->group()) {
         return -1;
       }
-      if (x->tag() > y->tag()) {
+      if (x->group() > y->group()) {
         return +1;
       }
       return 0;
@@ -218,6 +231,7 @@ int Compare(Exp x, Exp y) {
       return 0;
     }
 
+    case kCharacterClass:
     case kQuantifier:
       break;
   }
@@ -234,8 +248,8 @@ Exp EmptyString() {
   return exp;
 }
 
-Exp Tag(const pair<int, int>& tag) {
-  Exp exp(new Expression(kTag, tag));
+Exp Group(const tuple<int, Exp, Mode, bool>& group) {
+  Exp exp(new Expression(kGroup, group));
   return exp;
 }
 
@@ -276,6 +290,11 @@ Exp Conjunction(const list<Exp>& subexpressions, bool norm) {
 
 Exp Disjunction(const list<Exp>& subexpressions, bool norm) {
   Exp exp(new Expression(kDisjunction, subexpressions, norm));
+  return exp;
+}
+
+Exp CharacterClass(const pair<set<Rune>, bool>& character_class) {
+  Exp exp(new Expression(kCharacterClass, character_class));
   return exp;
 }
 
@@ -320,14 +339,6 @@ Exp Character(Rune character) {
   abort();
 }
 
-Exp CharacterClass(const set<Rune>& character_class) {
-  list<Exp> subs;
-  for (Rune character : character_class) {
-    subs.push_back(Character(character));
-  }
-  return Disjunction(subs, false);
-}
-
 Exp Normalised(Exp exp) {
   if (exp->norm()) {
     return exp;
@@ -335,7 +346,21 @@ Exp Normalised(Exp exp) {
   switch (exp->kind()) {
     case kEmptySet:
     case kEmptyString:
-    case kTag:
+      return exp;
+
+    case kGroup: {
+      int num; Exp sub; Mode mode; bool capture;
+      std::tie(num, sub, mode, capture) = exp->group();
+      sub = Normalised(sub);
+      if (sub->kind() == kEmptySet) {
+        return EmptySet();
+      }
+      if (sub->kind() == kEmptyString) {
+        return EmptyString();
+      }
+      return Group(num, sub, mode, capture);
+    }
+
     case kAnyByte:
     case kByte:
     case kByteRange:
@@ -437,14 +462,6 @@ Exp Normalised(Exp exp) {
       if (subs.size() == 1) {
         return subs.front();
       }
-      // ε & r ≈ ∅ if ν(r) = ∅
-      if (subs.front()->kind() == kEmptyString) {
-        for (Exp sub : subs) {
-          if (!IsNullable(sub)) {
-            return EmptySet();
-          }
-        }
-      }
       return Conjunction(subs, true);
     }
 
@@ -482,6 +499,7 @@ Exp Normalised(Exp exp) {
       return Disjunction(subs, true);
     }
 
+    case kCharacterClass:
     case kQuantifier:
       break;
   }
@@ -498,10 +516,8 @@ bool IsNullable(Exp exp) {
       // ν(ε) = ε
       return true;
 
-    case kTag:
-      // Although Tag expressions behave like EmptyString in other ways, they
-      // are not nullable.
-      return false;
+    case kGroup:
+      return IsNullable(std::get<1>(exp->group()));
 
     case kAnyByte:
       // ν(\C) = ∅
@@ -546,6 +562,7 @@ bool IsNullable(Exp exp) {
       }
       return false;
 
+    case kCharacterClass:
     case kQuantifier:
       break;
   }
@@ -559,9 +576,12 @@ Exp Derivative(Exp exp, int byte) {
       return EmptySet();
 
     case kEmptyString:
-    case kTag:
       // ∂aε = ∅
       return EmptySet();
+
+    case kGroup:
+      // This should never happen.
+      break;
 
     case kAnyByte:
       // ∂a\C = ε
@@ -626,110 +646,215 @@ Exp Derivative(Exp exp, int byte) {
       return Disjunction(subs, false);
     }
 
+    case kCharacterClass:
     case kQuantifier:
       break;
   }
   abort();
 }
 
-// Denormalises exp to a Conjunction (i.e. inner set) if necessary.
-static Exp InnerSet(Exp exp) {
+Outer Denormalised(Exp exp) {
+  Outer outer(new OuterSet);
   exp = Normalised(exp);
-  if (exp->kind() == kConjunction) {
-    return exp;
-  } else {
-    return Conjunction({exp}, false);
+  if (exp->kind() != kDisjunction) {
+    exp = Disjunction({exp}, false);
   }
+  for (Exp sub : exp->subexpressions()) {
+    if (sub->kind() != kConjunction) {
+      sub = Conjunction({sub}, false);
+    }
+    outer->push_back(make_pair(sub, list<Binding>({})));
+  }
+  return outer;
 }
 
-// Denormalises exp to a Disjunction (i.e. outer set) if necessary.
-static Exp OuterSet(Exp exp) {
-  exp = Normalised(exp);
-  if (exp->kind() == kDisjunction) {
+Outer PartialConcatenation(Outer x, Exp y, const list<Binding>& initial) {
+  // We mutate x as an optimisation.
+  for (auto& xi : *x) {
     list<Exp> subs;
-    for (Exp sub : exp->subexpressions()) {
-      sub = InnerSet(sub);
+    for (Exp sub : xi.first->subexpressions()) {
+      sub = Concatenation(sub, y);
       subs.push_back(sub);
     }
-    return Disjunction(subs, false);
-  } else {
-    exp = InnerSet(exp);
-    return Disjunction({exp}, false);
+    xi.first = Conjunction(subs, false);
+    xi.second.insert(xi.second.begin(), initial.begin(), initial.end());
   }
+  return x;
 }
 
-// Helper for building Concatenation expressions with partial derivatives.
-static Exp PartialConcatenation(Exp head, Exp tail) {
-  Exp outer = OuterSet(head);
-  list<Exp> inners;
-  for (Exp inner : outer->subexpressions()) {
-    inner = Concatenation(inner, tail);
-    inners.push_back(inner);
-  }
-  return Disjunction(inners, false);
-}
-
-// Helper for building Conjunction expressions with partial derivatives.
-static Exp PartialConjunction(const list<Exp>& subs) {
-  Exp outer;
-  for (Exp sub : subs) {
+Outer PartialComplement(Outer x) {
+  Outer outer(nullptr);
+  for (const auto& xi : *x) {
+    Outer tmp(new OuterSet);
+    for (Exp sub : xi.first->subexpressions()) {
+      sub = Complement(sub);
+      sub = Conjunction({sub}, false);
+      tmp->push_back(make_pair(sub, list<Binding>({})));
+    }
     if (outer == nullptr) {
-      outer = OuterSet(sub);
+      outer = std::move(tmp);
     } else {
-      Exp x = outer;
-      Exp y = OuterSet(sub);
-      list<Exp> inners;
-      for (Exp xinner : x->subexpressions()) {
-        for (Exp yinner : y->subexpressions()) {
-          Exp inner = Conjunction(xinner, yinner);
-          inners.push_back(inner);
-        }
-      }
-      outer = Disjunction(inners, false);
+      outer = PartialConjunction(std::move(outer), std::move(tmp));
     }
   }
   return outer;
 }
 
-// Helper for building Complement expressions with partial derivatives.
-// junyer's OCD wishes for this to be moved above PartialConjunction().
-static Exp PartialComplement(Exp sub) {
-  Exp outer = OuterSet(sub);
-  list<Exp> inners;
-  for (Exp inner : outer->subexpressions()) {
-    list<Exp> subs;
-    for (Exp sub : inner->subexpressions()) {
-      sub = Complement(sub);
-      subs.push_back(sub);
+Outer PartialConjunction(Outer x, Outer y) {
+  Outer outer(new OuterSet);
+  for (const auto& xi : *x) {
+    for (const auto& yi : *y) {
+      Exp sub = Conjunction(xi.first, yi.first);
+      list<Binding> bindings;
+      bindings.insert(bindings.end(), xi.second.begin(), xi.second.end());
+      bindings.insert(bindings.end(), yi.second.begin(), yi.second.end());
+      outer->push_back(make_pair(sub, bindings));
     }
-    inner = Disjunction(subs, false);
-    inners.push_back(inner);
   }
-  return PartialConjunction(inners);
+  return outer;
 }
 
-Exp Partial(Exp exp, int byte) {
+Outer PartialDisjunction(Outer x, Outer y) {
+  // We mutate x as an optimisation.
+  x->insert(x->end(), y->begin(), y->end());
+  return x;
+}
+
+// Computes the cancel Bindings for exp.
+static void CancelBindings(Exp exp, list<Binding>* bindings) {
+  switch (exp->kind()) {
+    case kEmptySet:
+    case kEmptyString:
+      return;
+
+    case kGroup: {
+      int num; Exp sub;
+      std::tie(num, sub, std::ignore, std::ignore) = exp->group();
+      bindings->push_back(make_pair(num, kCancel));
+      CancelBindings(sub, bindings);
+      return;
+    }
+
+    case kAnyByte:
+    case kByte:
+    case kByteRange:
+      return;
+
+    case kKleeneClosure:
+      CancelBindings(exp->sub(), bindings);
+      return;
+
+    case kConcatenation:
+      CancelBindings(exp->head(), bindings);
+      CancelBindings(exp->tail(), bindings);
+      return;
+
+    case kComplement:
+      return;
+
+    case kConjunction:
+    case kDisjunction:
+      for (Exp sub : exp->subexpressions()) {
+        CancelBindings(sub, bindings);
+      }
+      return;
+
+    case kCharacterClass:
+    case kQuantifier:
+      break;
+  }
+  abort();
+}
+
+// Computes the epsilon Bindings for exp.
+static void EpsilonBindings(Exp exp, list<Binding>* bindings) {
+  switch (exp->kind()) {
+    case kEmptySet:
+    case kEmptyString:
+      return;
+
+    case kGroup: {
+      int num; Exp sub;
+      std::tie(num, sub, std::ignore, std::ignore) = exp->group();
+      bindings->push_back(make_pair(num, kEpsilon));
+      EpsilonBindings(sub, bindings);
+      return;
+    }
+
+    case kAnyByte:
+    case kByte:
+    case kByteRange:
+      return;
+
+    case kKleeneClosure:
+      if (IsNullable(exp->sub())) {
+        EpsilonBindings(exp->sub(), bindings);
+      }
+      return;
+
+    case kConcatenation:
+      EpsilonBindings(exp->head(), bindings);
+      EpsilonBindings(exp->tail(), bindings);
+      return;
+
+    case kComplement:
+      return;
+
+    case kConjunction:
+      for (Exp sub : exp->subexpressions()) {
+        EpsilonBindings(sub, bindings);
+      }
+      return;
+
+    case kDisjunction:
+      for (Exp sub : exp->subexpressions()) {
+        if (IsNullable(sub)) {
+          EpsilonBindings(sub, bindings);
+          return;
+        }
+      }
+      return;
+
+    case kCharacterClass:
+    case kQuantifier:
+      break;
+  }
+  abort();
+}
+
+Outer Partial(Exp exp, int byte) {
   switch (exp->kind()) {
     case kEmptySet:
       // ∂a∅ = ∅
-      return EmptySet();
+      return Denormalised(EmptySet());
 
     case kEmptyString:
-    case kTag:
       // ∂aε = ∅
-      return EmptySet();
+      return Denormalised(EmptySet());
+
+    case kGroup: {
+      int num; Exp sub; Mode mode; bool capture;
+      std::tie(num, sub, mode, capture) = exp->group();
+      Outer outer = Partial(sub, byte);
+      for (auto& i : *outer) {
+        i.first = Group(num, i.first, mode, capture);
+        i.first = Conjunction({i.first}, false);
+        i.second.push_back(make_pair(num, kAppend));
+      }
+      return outer;
+    }
 
     case kAnyByte:
       // ∂a\C = ε
-      return EmptyString();
+      return Denormalised(EmptyString());
 
     case kByte:
       // ∂aa = ε
       // ∂ab = ∅ for b ≠ a
       if (exp->byte() == byte) {
-        return EmptyString();
+        return Denormalised(EmptyString());
       } else {
-        return EmptySet();
+        return Denormalised(EmptySet());
       }
 
     case kByteRange:
@@ -737,25 +862,36 @@ Exp Partial(Exp exp, int byte) {
       //       ∅ if a ∉ S
       if (exp->byte_range().first <= byte &&
           byte <= exp->byte_range().second) {
-        return EmptyString();
+        return Denormalised(EmptyString());
       } else {
-        return EmptySet();
+        return Denormalised(EmptySet());
       }
 
-    case kKleeneClosure:
+    case kKleeneClosure: {
       // ∂a(r∗) = ∂ar · r∗
+      list<Binding> cancel;
+      CancelBindings(exp->sub(), &cancel);
       return PartialConcatenation(Partial(exp->sub(), byte),
-                                  exp);
+                                  exp,
+                                  cancel);
+    }
 
     case kConcatenation:
       // ∂a(r · s) = ∂ar · s + ν(r) · ∂as
       if (IsNullable(exp->head())) {
-        return Disjunction(PartialConcatenation(Partial(exp->head(), byte),
-                                                exp->tail()),
-                           Partial(exp->tail(), byte));
+        list<Binding> epsilon;
+        EpsilonBindings(exp->head(), &epsilon);
+        return PartialDisjunction(
+            PartialConcatenation(Partial(exp->head(), byte),
+                                 exp->tail(),
+                                 list<Binding>({})),
+            PartialConcatenation(Partial(exp->tail(), byte),
+                                 EmptyString(),
+                                 epsilon));
       } else {
         return PartialConcatenation(Partial(exp->head(), byte),
-                                    exp->tail());
+                                    exp->tail(),
+                                    list<Binding>({}));
       }
 
     case kComplement:
@@ -764,76 +900,33 @@ Exp Partial(Exp exp, int byte) {
 
     case kConjunction: {
       // ∂a(r & s) = ∂ar & ∂as
-      list<Exp> subs;
+      Outer outer(nullptr);
       for (Exp sub : exp->subexpressions()) {
-        sub = Partial(sub, byte);
-        subs.push_back(sub);
+        Outer tmp = Partial(sub, byte);
+        if (outer == nullptr) {
+          outer = std::move(tmp);
+        } else {
+          outer = PartialConjunction(std::move(outer), std::move(tmp));
+        }
       }
-      return PartialConjunction(subs);
+      return outer;
     }
 
     case kDisjunction: {
       // ∂a(r + s) = ∂ar + ∂as
-      list<Exp> subs;
+      Outer outer(nullptr);
       for (Exp sub : exp->subexpressions()) {
-        sub = Partial(sub, byte);
-        subs.push_back(sub);
+        Outer tmp = Partial(sub, byte);
+        if (outer == nullptr) {
+          outer = std::move(tmp);
+        } else {
+          outer = PartialDisjunction(std::move(outer), std::move(tmp));
+        }
       }
-      return Disjunction(subs, false);
+      return outer;
     }
 
-    case kQuantifier:
-      break;
-  }
-  abort();
-}
-
-Exp Epsilon(Exp exp) {
-  switch (exp->kind()) {
-    case kEmptySet:
-    case kEmptyString:
-    case kTag:
-    case kAnyByte:
-    case kByte:
-    case kByteRange:
-      return exp;
-
-    case kKleeneClosure:
-      return Disjunction(EmptyString(),
-                         PartialConcatenation(Epsilon(exp->sub()),
-                                              exp));
-
-    case kConcatenation:
-      if (IsNullable(exp->head())) {
-        return Disjunction(PartialConcatenation(Epsilon(exp->head()),
-                                                exp->tail()),
-                           Epsilon(exp->tail()));
-      } else {
-        return PartialConcatenation(Epsilon(exp->head()),
-                                    exp->tail());
-      }
-
-    case kComplement:
-      return exp;
-
-    case kConjunction: {
-      list<Exp> subs;
-      for (Exp sub : exp->subexpressions()) {
-        sub = Epsilon(sub);
-        subs.push_back(sub);
-      }
-      return PartialConjunction(subs);
-    }
-
-    case kDisjunction: {
-      list<Exp> subs;
-      for (Exp sub : exp->subexpressions()) {
-        sub = Epsilon(sub);
-        subs.push_back(sub);
-      }
-      return Disjunction(subs, false);
-    }
-
+    case kCharacterClass:
     case kQuantifier:
       break;
   }
@@ -885,7 +978,6 @@ static void Intersection(const list<bitset<256>>& x,
 }
 
 void Partitions(Exp exp, list<bitset<256>>* partitions) {
-  partitions->clear();
   switch (exp->kind()) {
     case kEmptySet:
       // C(∅) = {Σ}
@@ -893,9 +985,12 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
       return;
 
     case kEmptyString:
-    case kTag:
       // C(ε) = {Σ}
       partitions->push_back({});
+      return;
+
+    case kGroup:
+      Partitions(std::get<1>(exp->group()), partitions);
       return;
 
     case kAnyByte:
@@ -977,6 +1072,7 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
       }
       return;
 
+    case kCharacterClass:
     case kQuantifier:
       break;
   }
@@ -984,13 +1080,16 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
 }
 
 // A simple framework for implementing the post-parse rewrites.
-class WalkerBase {
+class Walker {
  public:
-  WalkerBase() {}
-  virtual ~WalkerBase() {}
+  Walker() {}
+  virtual ~Walker() {}
 
-  virtual Exp WalkTag(Exp exp) {
-    return exp;
+  virtual Exp WalkGroup(Exp exp) {
+    int num; Exp sub; Mode mode; bool capture;
+    std::tie(num, sub, mode, capture) = exp->group();
+    sub = Walk(sub);
+    return Group(num, sub, mode, capture);
   }
 
   virtual Exp WalkKleeneClosure(Exp exp) {
@@ -1027,6 +1126,10 @@ class WalkerBase {
     return Disjunction(subs, false);
   }
 
+  virtual Exp WalkCharacterClass(Exp exp) {
+    return exp;
+  }
+
   virtual Exp WalkQuantifier(Exp exp) {
     Exp sub; int min; int max;
     std::tie(sub, min, max) = exp->quantifier();
@@ -1040,8 +1143,8 @@ class WalkerBase {
       case kEmptyString:
         return exp;
 
-      case kTag:
-        return WalkTag(exp);
+      case kGroup:
+        return WalkGroup(exp);
 
       case kAnyByte:
       case kByte:
@@ -1063,6 +1166,9 @@ class WalkerBase {
       case kDisjunction:
         return WalkDisjunction(exp);
 
+      case kCharacterClass:
+        return WalkCharacterClass(exp);
+
       case kQuantifier:
         return WalkQuantifier(exp);
     }
@@ -1070,15 +1176,15 @@ class WalkerBase {
   }
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(WalkerBase);
-  WalkerBase(const WalkerBase&) = delete;
-  void operator=(const WalkerBase&) = delete;
+  //DISALLOW_COPY_AND_ASSIGN(Walker);
+  Walker(const Walker&) = delete;
+  void operator=(const Walker&) = delete;
 };
 
-class FlattenConjunctionsAndDisjunctions : public WalkerBase {
+class FlattenConjunctionsAndDisjunctions : public Walker {
  public:
   FlattenConjunctionsAndDisjunctions() {}
-  virtual ~FlattenConjunctionsAndDisjunctions() {}
+  ~FlattenConjunctionsAndDisjunctions() override {}
 
   inline void FlattenImpl(Exp exp, list<Exp>* subs) {
     Kind kind = exp->kind();
@@ -1109,13 +1215,13 @@ class FlattenConjunctionsAndDisjunctions : public WalkerBase {
     }
   }
 
-  virtual Exp WalkConjunction(Exp exp) {
+  Exp WalkConjunction(Exp exp) override {
     list<Exp> subs;
     FlattenImpl(exp, &subs);
     return Conjunction(subs, false);
   }
 
-  virtual Exp WalkDisjunction(Exp exp) {
+  Exp WalkDisjunction(Exp exp) override {
     list<Exp> subs;
     FlattenImpl(exp, &subs);
     return Disjunction(subs, false);
@@ -1127,110 +1233,104 @@ class FlattenConjunctionsAndDisjunctions : public WalkerBase {
   void operator=(const FlattenConjunctionsAndDisjunctions&) = delete;
 };
 
-class StripTags : public WalkerBase {
+class StripGroups : public Walker {
  public:
-  StripTags() {}
-  virtual ~StripTags() {}
+  StripGroups() {}
+  ~StripGroups() override {}
 
-  virtual Exp WalkConcatenation(Exp exp) {
-    Exp head = Walk(exp->head());
-    Exp tail = Walk(exp->tail());
-    if (head->kind() == kTag) {
-      return tail;
-    }
-    if (tail->kind() == kTag) {
-      return head;
-    }
-    return Concatenation(head, tail);
+  Exp WalkGroup(Exp exp) override {
+    Exp sub = Walk(std::get<1>(exp->group()));
+    return sub;
   }
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(StripTags);
-  StripTags(const StripTags&) = delete;
-  void operator=(const StripTags&) = delete;
+  //DISALLOW_COPY_AND_ASSIGN(StripGroups);
+  StripGroups(const StripGroups&) = delete;
+  void operator=(const StripGroups&) = delete;
 };
 
-class ApplyTagsWithinDisjunctions : public WalkerBase {
+class ApplyGroups : public Walker {
  public:
-  ApplyTagsWithinDisjunctions() {}
-  virtual ~ApplyTagsWithinDisjunctions() {}
+  ApplyGroups() {}
+  ~ApplyGroups() override {}
 
-  virtual Exp WalkDisjunction(Exp exp) {
-    // Applying Tags to AnyCharacter or CharacterClass is a waste of space
-    // and time. In the former case, it breaks the .∗ ≈ ¬∅ rewrite. In the
-    // latter case, the number of subexpressions could be extremely large.
-    bool unneeded = true;
-    for (Exp sub : exp->subexpressions()) {
-      while (sub->kind() == kConcatenation &&
-             (sub->head()->kind() == kByte ||
-              sub->head()->kind() == kByteRange)) {
-        sub = sub->tail();
-      }
-      unneeded &= (sub->kind() == kByte ||
-                   sub->kind() == kByteRange);
-    }
-    if (unneeded) {
+  Exp WalkComplement(Exp exp) override {
+    Exp sub = Walk(exp->sub());
+    sub = Complement(sub);
+    return Group(-1, sub, kMaximal, false);
+  }
+
+  Exp WalkDisjunction(Exp exp) override {
+    // Applying Groups to AnyCharacter would break the .∗ ≈ ¬∅ rewrite.
+    if (exp == AnyCharacter()) {
       return exp;
     }
-
+    // Applying Groups to the subexpressions will identify the leftmost.
     list<Exp> subs;
     for (Exp sub : exp->subexpressions()) {
       sub = Walk(sub);
-      // This left parenthesis (non-capturing) is passive.
-      Exp left = Tag(0, 0);
-      // This right parenthesis is passive.
-      Exp right = Tag(1, 0);
-      sub = Concatenation(left, sub, right);
+      sub = Group(-1, sub, kPassive, false);
       subs.push_back(sub);
     }
     return Disjunction(subs, false);
   }
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(ApplyTagsWithinDisjunctions);
-  ApplyTagsWithinDisjunctions(const ApplyTagsWithinDisjunctions&) = delete;
-  void operator=(const ApplyTagsWithinDisjunctions&) = delete;
+  //DISALLOW_COPY_AND_ASSIGN(ApplyGroups);
+  ApplyGroups(const ApplyGroups&) = delete;
+  void operator=(const ApplyGroups&) = delete;
 };
 
-class NumberTags : public WalkerBase {
+class NumberGroups : public Walker {
  public:
-  explicit NumberTags(redgrep_yy::Data* yydata) : yydata_(yydata) {}
-  virtual ~NumberTags() {}
+  explicit NumberGroups(redgrep_yy::Data* yydata) : yydata_(yydata) {}
+  ~NumberGroups() override {}
 
-  virtual Exp WalkTag(Exp exp) {
-    return yydata_->Number(exp);
+  Exp WalkGroup(Exp exp) override {
+    int num = yydata_->Number(exp);
+    Exp sub; Mode mode; bool capture;
+    std::tie(std::ignore, sub, mode, capture) = exp->group();
+    sub = Walk(sub);
+    return Group(num, sub, mode, capture);
   }
 
  private:
   redgrep_yy::Data* yydata_;
 
-  //DISALLOW_COPY_AND_ASSIGN(NumberTags);
-  NumberTags(const NumberTags&) = delete;
-  void operator=(const NumberTags&) = delete;
+  //DISALLOW_COPY_AND_ASSIGN(NumberGroups);
+  NumberGroups(const NumberGroups&) = delete;
+  void operator=(const NumberGroups&) = delete;
 };
 
-class StripTagsWithinComplements : public WalkerBase {
+class ExpandCharacterClasses : public Walker {
  public:
-  StripTagsWithinComplements() {}
-  virtual ~StripTagsWithinComplements() {}
+  ExpandCharacterClasses() {}
+  ~ExpandCharacterClasses() override {}
 
-  virtual Exp WalkComplement(Exp exp) {
-    Exp sub = StripTags().Walk(exp->sub());
-    return Complement(sub);
+  Exp WalkCharacterClass(Exp exp) override {
+    list<Exp> subs;
+    for (Rune character : exp->character_class().first) {
+      subs.push_back(Character(character));
+    }
+    Exp tmp = Disjunction(subs, false);
+    if (exp->character_class().second) {
+      tmp = Conjunction(Complement(tmp), AnyCharacter());
+    }
+    return tmp;
   }
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(StripTagsWithinComplements);
-  StripTagsWithinComplements(const StripTagsWithinComplements&) = delete;
-  void operator=(const StripTagsWithinComplements&) = delete;
+  //DISALLOW_COPY_AND_ASSIGN(ExpandCharacterClasses);
+  ExpandCharacterClasses(const ExpandCharacterClasses&) = delete;
+  void operator=(const ExpandCharacterClasses&) = delete;
 };
 
-class ExpandQuantifiers : public WalkerBase {
+class ExpandQuantifiers : public Walker {
  public:
   ExpandQuantifiers() {}
-  virtual ~ExpandQuantifiers() {}
+  ~ExpandQuantifiers() override {}
 
-  virtual Exp WalkQuantifier(Exp exp) {
+  Exp WalkQuantifier(Exp exp) override {
     Exp sub; int min; int max;
     std::tie(sub, min, max) = exp->quantifier();
     sub = Walk(sub);
@@ -1262,7 +1362,8 @@ bool Parse(llvm::StringRef str, Exp* exp) {
   redgrep_yy::parser parser(&yydata);
   if (parser.parse() == 0) {
     *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
-    *exp = StripTags().Walk(*exp);
+    *exp = StripGroups().Walk(*exp);
+    *exp = ExpandCharacterClasses().Walk(*exp);
     *exp = ExpandQuantifiers().Walk(*exp);
     return true;
   }
@@ -1270,14 +1371,14 @@ bool Parse(llvm::StringRef str, Exp* exp) {
 }
 
 bool Parse(llvm::StringRef str, Exp* exp,
-           vector<int>* modes, vector<int>* groups) {
-  redgrep_yy::Data yydata(str, exp, modes, groups);
+           vector<Mode>* modes, vector<int>* captures) {
+  redgrep_yy::Data yydata(str, exp, modes, captures);
   redgrep_yy::parser parser(&yydata);
   if (parser.parse() == 0) {
     *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
-    *exp = ApplyTagsWithinDisjunctions().Walk(*exp);
-    *exp = NumberTags(&yydata).Walk(*exp);
-    *exp = StripTagsWithinComplements().Walk(*exp);
+    *exp = ApplyGroups().Walk(*exp);
+    *exp = NumberGroups(&yydata).Walk(*exp);
+    *exp = ExpandCharacterClasses().Walk(*exp);
     *exp = ExpandQuantifiers().Walk(*exp);
     return true;
   }
@@ -1296,85 +1397,10 @@ bool Match(Exp exp, llvm::StringRef str) {
   return match;
 }
 
-// Prunes transitions and ε-transitions to junk states in fa.
-static void Prune(FA* fa) {
-  // Create a reverse mapping of transitions.
-  typedef decltype(fa->transition_)::iterator TransitionIterator;
-  multimap<int, TransitionIterator> reverse_transition;
-  for (TransitionIterator i = fa->transition_.begin();
-       i != fa->transition_.end();
-       ++i) {
-    reverse_transition.insert(make_pair(i->second, i));
-  }
-  // Create a reverse mapping of ε-transitions.
-  typedef decltype(fa->epsilon_)::iterator EpsilonIterator;
-  multimap<int, EpsilonIterator> reverse_epsilon;
-  for (EpsilonIterator i = fa->epsilon_.begin();
-       i != fa->epsilon_.end();
-       ++i) {
-    reverse_epsilon.insert(make_pair(i->second.first, i));
-  }
-  // Identify the states that are junk.
-  map<int, bool> states;
-  list<int> queue;
-  queue.push_back(fa->error_);
-  while (!queue.empty()) {
-    int next = queue.front();
-    queue.pop_front();
-    for (auto reverse = reverse_transition.lower_bound(next);
-         reverse != reverse_transition.upper_bound(next);
-         ++reverse) {
-      int curr = reverse->second->first.first;
-      if (fa->IsAccepting(curr)) {
-        // An accepting state is not junk.
-        continue;
-      }
-      auto state = states.insert(make_pair(curr, false));
-      if (state.second) {
-        auto transition = fa->transition_.find(make_pair(curr, -1));
-        ++transition;
-        if (transition == fa->transition_.end() ||
-            transition->first.first != curr) {
-          state.first->second = true;
-          queue.push_back(curr);
-        }
-      }
-    }
-  }
-  for (const auto& i : states) {
-    int curr = i.first;
-    if (i.second) {
-      queue.push_back(curr);
-    }
-  }
-  while (!queue.empty()) {
-    int next = queue.front();
-    queue.pop_front();
-    for (auto reverse = reverse_transition.lower_bound(next);
-         reverse != reverse_transition.upper_bound(next);
-         ++reverse) {
-      // Prune the transition by resetting it.
-      reverse->second->second = fa->error_;
-    }
-    for (auto reverse = reverse_epsilon.lower_bound(next);
-         reverse != reverse_epsilon.upper_bound(next);
-         ++reverse) {
-      int curr = reverse->second->first;
-      // Prune the ε-transition by unsetting it.
-      fa->epsilon_.erase(reverse->second);
-      if (!fa->HasTransition(curr) &&
-          !fa->HasEpsilon(curr)) {
-        queue.push_back(curr);
-      }
-    }
-  }
-}
-
 // Outputs the FA compiled from exp.
-// If tagged is true, extended logic is enabled to construct a TNFA.
-// Otherwise, standard logic is used to construct a DFA.
+// If tagged is true, uses Antimirov partial derivatives to construct a TNFA.
+// Otherwise, uses Brzozowski derivatives to construct a DFA.
 inline size_t CompileImpl(Exp exp, bool tagged, FA* fa) {
-  fa->Clear();
   map<Exp, int> states;
   list<Exp> queue;
   auto LookupOrInsert = [&states, &queue](Exp exp) -> int {
@@ -1394,88 +1420,69 @@ inline size_t CompileImpl(Exp exp, bool tagged, FA* fa) {
     if (exp->kind() == kEmptySet) {
       fa->error_ = curr;
     }
-    fa->accepting_[curr] = IsNullable(exp);
-    if (tagged) {
-      if (exp->kind() == kDisjunction) {
-        for (Exp sub : exp->subexpressions()) {
-          int next = LookupOrInsert(sub);
-          fa->epsilon_.insert(make_pair(curr, make_pair(next, set<int>())));
-        }
-        continue;
+    if (IsNullable(exp)) {
+      fa->accepting_[curr] = true;
+      if (tagged) {
+        TNFA* tnfa = reinterpret_cast<TNFA*>(fa);
+        EpsilonBindings(exp, &tnfa->final_[curr]);
       }
-      set<int> tags;
-      Exp inn = InnerSet(exp);
-      list<Exp> subs;
-      for (Exp sub : inn->subexpressions()) {
-        while (sub->kind() == kConcatenation &&
-               sub->head()->kind() == kTag) {
-          tags.insert(sub->head()->tag().first);
-          sub = sub->tail();
-        }
-        if (sub->kind() == kTag) {
-          tags.insert(sub->tag().first);
-          sub = EmptyString();
-        }
-        subs.push_back(sub);
-      }
-      inn = Conjunction(subs, false);
-      inn = Normalised(inn);
-      if (inn != exp) {
-        int next = LookupOrInsert(inn);
-        fa->epsilon_.insert(make_pair(curr, make_pair(next, tags)));
-        continue;
-      }
-      Exp eps = Epsilon(exp);
-      eps = Normalised(eps);
-      if (eps != exp) {
-        bool removed = false;
-        if (eps->kind() == kDisjunction) {
-          list<Exp> copy = eps->subexpressions();
-          copy.remove(exp);
-          if (copy != eps->subexpressions()) {
-            removed = true;
-            eps = Disjunction(copy, false);
-            eps = Normalised(eps);
-          }
-        }
-        int next = LookupOrInsert(eps);
-        fa->epsilon_.insert(make_pair(curr, make_pair(next, set<int>())));
-        if (!removed) {
-          continue;
-        }
-      }
+    } else {
+      fa->accepting_[curr] = false;
     }
-    list<bitset<256>> partitions;
-    Partitions(exp, &partitions);
-    int next0;
-    for (list<bitset<256>>::const_iterator i = partitions.begin();
-         i != partitions.end();
+    list<bitset<256>>* partitions = &fa->partitions_[curr];
+    Partitions(exp, partitions);
+    for (list<bitset<256>>::const_iterator i = partitions->begin();
+         i != partitions->end();
          ++i) {
       int byte;
-      if (i == partitions.begin()) {
+      if (i == partitions->begin()) {
         // *i is Σ-based. Use a byte that it doesn't contain.
         byte = -1;
       } else {
         // *i is ∅-based. Use the first byte that it contains.
         for (byte = 0; !i->test(byte); ++byte) {}
       }
-      Exp der = tagged ? Partial(exp, byte) : Derivative(exp, byte);
-      der = Normalised(der);
-      int next = LookupOrInsert(der);
-      if (i == partitions.begin()) {
-        // Set the "default" transition.
-        fa->transition_[make_pair(curr, byte)] = next;
-        next0 = next;
-      } else if (next != next0) {
-        for (byte = 0; byte < 256; ++byte) {
-          if (i->test(byte)) {
-            fa->transition_[make_pair(curr, byte)] = next;
+      if (tagged) {
+        TNFA* tnfa = reinterpret_cast<TNFA*>(fa);
+        Outer outer = Partial(exp, byte);
+        set<pair<int, list<Binding>>> seen;
+        for (const auto& j : *outer) {
+          Exp par = Normalised(j.first);
+          int next = LookupOrInsert(par);
+          if (seen.count(make_pair(next, j.second)) == 0) {
+            seen.insert(make_pair(next, j.second));
+            if (i == partitions->begin()) {
+              // Set the "default" transition.
+              tnfa->transition_.insert(make_pair(
+                  make_pair(curr, byte), make_pair(next, j.second)));
+            } else {
+              for (int byte = 0; byte < 256; ++byte) {
+                if (i->test(byte)) {
+                  tnfa->transition_.insert(make_pair(
+                      make_pair(curr, byte), make_pair(next, j.second)));
+                }
+              }
+            }
+          }
+        }
+      } else {
+        DFA* dfa = reinterpret_cast<DFA*>(fa);
+        Exp der = Derivative(exp, byte);
+        der = Normalised(der);
+        int next = LookupOrInsert(der);
+        if (i == partitions->begin()) {
+          // Set the "default" transition.
+          dfa->transition_[make_pair(curr, byte)] = next;
+        } else {
+          for (int byte = 0; byte < 256; ++byte) {
+            if (i->test(byte)) {
+              dfa->transition_[make_pair(curr, byte)] = next;
+            }
           }
         }
       }
     }
   }
-  Prune(fa);
   return states.size();
 }
 
@@ -1503,107 +1510,119 @@ bool Match(const DFA& dfa, llvm::StringRef str) {
   return dfa.IsAccepting(curr);
 }
 
+// Applies the Bindings to offsets using pos.
+static void ApplyBindings(const list<Binding>& bindings,
+                          int pos,
+                          vector<int>* offsets) {
+  for (const auto& i : bindings) {
+    int l = 2 * i.first + 0;
+    int r = 2 * i.first + 1;
+    switch (i.second) {
+      case kCancel:
+        if ((*offsets)[l] != -1) {
+          (*offsets)[l] = -1;
+          (*offsets)[r] = -1;
+        }
+        continue;
+      case kEpsilon:
+      case kAppend:
+        if ((*offsets)[l] == -1) {
+          (*offsets)[l] = pos;
+          (*offsets)[r] = pos;
+        }
+        if (i.second == kAppend) {
+          ++(*offsets)[r];
+        }
+        continue;
+    }
+    abort();
+  }
+}
+
 // Returns true iff x precedes y in the total order specified by modes.
 static bool Precedes(const vector<int>& x,
                      const vector<int>& y,
-                     const vector<int>& modes) {
+                     const vector<Mode>& modes) {
   for (size_t i = 0; i < modes.size(); ++i) {
-    if (x[i] == y[i] ||
-        // For passive mode, we continue if both are -1 or both are not -1.
-        // Note that we don't bother checking if (x[i] == -1 && y[i] == -1)
-        // because the preceding check covers that case.
-        (modes[i] == 0 &&
-         x[i] != -1 && y[i] != -1)) {
+    int l = 2 * i + 0;
+    int r = 2 * i + 1;
+    if (x[l] == -1 && y[l] == -1) {
+      continue;
+    } else if (x[l] == -1) {
+      return false;
+    } else if (y[l] == -1) {
+      return true;
+    } else if (modes[i] == kPassive) {
+      continue;
+    } else if (x[l] < y[l]) {
+      return true;
+    } else if (x[l] > y[l]) {
+      return false;
+    } else if (x[r] < y[r]) {
+      return modes[i] == kMinimal;
+    } else if (x[r] > y[r]) {
+      return modes[i] == kMaximal;
+    } else {
       continue;
     }
-    switch (modes[i]) {
-      case -1:
-        return x[i] < y[i];
-      case 0:
-        return x[i] != -1;
-      case 1:
-        return x[i] > y[i];
-      default:
-        break;
-    }
-    abort();
   }
   return false;
 }
 
-// Follows ε-transitions in order to augment states with its ε-closure.
-// The value of each tag seen will be set to pos.
-static void FollowEpsilons(const TNFA& tnfa, int pos,
-                           map<int, vector<int>>* states) {
-  list<int> queue;
-  for (const auto& i : *states) {
-    int curr = i.first;
-    queue.push_back(curr);
-  }
-  while (!queue.empty()) {
-    int curr = queue.front();
-    queue.pop_front();
-    for (auto epsilon = tnfa.epsilon_.lower_bound(curr);
-         epsilon != tnfa.epsilon_.upper_bound(curr);
-         ++epsilon) {
-      int next = epsilon->second.first;
-      const set<int>& tags = epsilon->second.second;
-      vector<int> copy = states->at(curr);
-      for (int tag : tags) {
-        copy[tag] = pos;
-      }
-      auto state = states->insert(make_pair(next, copy));
-      if (state.second) {
-        queue.push_back(next);
-      } else if (Precedes(copy, state.first->second, tnfa.modes_)) {
-        state.first->second = copy;
-        queue.push_back(next);
-      }
-    }
-  }
-}
-
-bool Match(const TNFA& tnfa, llvm::StringRef str, vector<int>* values) {
-  map<int, vector<int>> states;
-  states[0].assign(tnfa.modes_.size(), -1);
+bool Match(const TNFA& tnfa, llvm::StringRef str,
+           vector<int>* offsets) {
+  auto CompareOffsets = [&tnfa](const pair<int, vector<int>>& x,
+                                const pair<int, vector<int>>& y) -> bool {
+    return Precedes(x.second, y.second, tnfa.modes_);
+  };
+  list<pair<int, vector<int>>> curr_states;
+  curr_states.push_back(make_pair(0, vector<int>(2 * tnfa.modes_.size(), -1)));
   int pos = 0;
-  FollowEpsilons(tnfa, pos, &states);
   while (!str.empty()) {
     int byte = str[0];
     str = str.drop_front(1);
-    map<int, vector<int>> tmp;
-    tmp.swap(states);
-    for (const auto& i : tmp) {
+    // For each current state, determine the next states - applying Bindings -
+    // and then sort them by comparing offsets. Doing this repeatedly from the
+    // initial state and discarding next states that have been seen already in
+    // the current round is intended to simulate a VM implementation.
+    list<pair<int, vector<int>>> next_states;
+    set<int> seen;
+    for (const auto& i : curr_states) {
       int curr = i.first;
-      if (!tnfa.HasTransition(curr)) {
-        continue;
-      }
-      auto transition = tnfa.transition_.find(make_pair(curr, byte));
-      if (transition == tnfa.transition_.end()) {
+      pair<int, int> key = make_pair(curr, byte);
+      auto transition = tnfa.transition_.lower_bound(key);
+      if (transition == tnfa.transition_.upper_bound(key)) {
         // Get the "default" transition.
-        transition = tnfa.transition_.find(make_pair(curr, -1));
+        key = make_pair(curr, -1);
+        transition = tnfa.transition_.lower_bound(key);
       }
-      int next = transition->second;
-      if (tnfa.IsError(next)) {
-        continue;
+      list<pair<int, vector<int>>> tmp;
+      while (transition != tnfa.transition_.upper_bound(key)) {
+        int next = transition->second.first;
+        if (seen.count(next) == 0 &&
+            !tnfa.IsError(next)) {
+          seen.insert(next);
+          vector<int> copy = i.second;
+          ApplyBindings(transition->second.second, pos, &copy);
+          tmp.push_back(make_pair(next, copy));
+        }
+        ++transition;
       }
-      auto state = states.insert(make_pair(next, i.second));
-      if (!state.second) {
-        // This should never happen. If state X and state Y both transition to
-        // state Z on byte B, then they should not have been separate states.
-        abort();
-      }
+      tmp.sort(CompareOffsets);
+      next_states.insert(next_states.end(), tmp.begin(), tmp.end());
     }
+    curr_states.swap(next_states);
     ++pos;
-    FollowEpsilons(tnfa, pos, &states);
   }
-  for (const auto& i : states) {
+  for (const auto& i : curr_states) {
     int curr = i.first;
-    // Note that a TNFA should have exactly one accepting state.
     if (tnfa.IsAccepting(curr)) {
-      values->resize(tnfa.groups_.size());
-      for (size_t j = 0; j < tnfa.groups_.size(); ++j) {
-        (*values)[j] = i.second[tnfa.groups_[j]];
+      vector<int> copy = i.second;
+      ApplyBindings(tnfa.final_.find(curr)->second, pos, &copy);
+      offsets->resize(2 * tnfa.captures_.size());
+      for (size_t j = 0; j < tnfa.captures_.size(); ++j) {
+        (*offsets)[2 * j + 0] = copy[2 * tnfa.captures_[j] + 0];
+        (*offsets)[2 * j + 1] = copy[2 * tnfa.captures_[j] + 1];
       }
       return true;
     }
@@ -1636,9 +1655,8 @@ Fun::Fun() {
   pthread_once(&once, &InitializeNativeTarget);
   context_.reset(new llvm::LLVMContext);
   module_ = new llvm::Module("M", *context_);
-  engine_.reset(llvm::EngineBuilder(std::unique_ptr<llvm::Module>(module_))
-                    .setUseMCJIT(true)
-                    .create());
+  engine_.reset(
+      llvm::EngineBuilder(std::unique_ptr<llvm::Module>(module_)).create());
   function_ = llvm::Function::Create(
       llvm::TypeBuilder<NativeMatch, false>::get(*context_),
       llvm::GlobalValue::ExternalLinkage, "F", module_);
@@ -1727,6 +1745,24 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
   bb.SetInsertPoint(entry);
   bb.CreateBr(states[0].first);
 
+  // Do we begin by scanning memory for a byte? If so, we can make memchr(3) do
+  // that for us. It will almost certainly be vectorised and thus much faster.
+  {
+    llvm::BasicBlock* bb0 = states[0].first;
+    llvm::BasicBlock* bb1 = states[0].second;
+    llvm::BranchInst* bra = llvm::cast<llvm::BranchInst>(bb0->getTerminator());
+    llvm::SwitchInst* swi = llvm::cast<llvm::SwitchInst>(bb1->getTerminator());
+    if (swi->getDefaultDest() == bb0 &&
+        swi->getNumCases() == 1) {
+      // What is the byte that we are trying to find?
+      fun->memchr_byte_ = swi->case_begin().getCaseValue()->getZExtValue();
+      // What should we return if we fail to find it?
+      fun->memchr_fail_ = bra->getSuccessor(0) == return_true;
+    } else {
+      fun->memchr_byte_ = -1;
+    }
+  }
+
   // Use the default optimisations.
   llvm::PassManagerBuilder opt;
 
@@ -1745,9 +1781,9 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
 class DiscoverMachineCodeSize : public llvm::JITEventListener {
  public:
   explicit DiscoverMachineCodeSize(Fun* fun) : fun_(fun) {}
-  virtual ~DiscoverMachineCodeSize() {}
+  ~DiscoverMachineCodeSize() override {}
 
-  virtual void NotifyObjectEmitted(const llvm::ObjectImage& object) {
+  void NotifyObjectEmitted(const llvm::ObjectImage& object) override {
     for (const llvm::object::SymbolRef& symbol : object.symbols()) {
       llvm::StringRef name;
       symbol.getName(name);
@@ -1783,6 +1819,13 @@ size_t Compile(const DFA& dfa, Fun* fun) {
 }
 
 bool Match(const Fun& fun, llvm::StringRef str) {
+  if (fun.memchr_byte_ != -1) {
+    const void* ptr = memchr(str.data(), fun.memchr_byte_, str.size());
+    if (ptr == nullptr) {
+      return fun.memchr_fail_;
+    }
+    str = str.drop_front(reinterpret_cast<const char*>(ptr) - str.data());
+  }
   NativeMatch* match = reinterpret_cast<NativeMatch*>(fun.machine_code_addr_);
   return (*match)(str.data(), str.size());
 }

@@ -37,56 +37,41 @@ class Data {
   Data(llvm::StringRef str, redgrep::Exp* exp)
       : str_(str),
         exp_(exp),
+        num_(0),
         modes_(nullptr),
-        groups_(nullptr),
-        stack_() {
-  }
+        captures_(nullptr) {}
 
   Data(llvm::StringRef str, redgrep::Exp* exp,
-       std::vector<int>* modes, std::vector<int>* groups)
+       std::vector<redgrep::Mode>* modes, std::vector<int>* captures)
       : str_(str),
         exp_(exp),
+        num_(0),
         modes_(modes),
-        groups_(groups),
-        stack_() {
-    modes_->clear();
-    groups_->clear();
-  }
+        captures_(captures) {}
 
-  virtual ~Data() {}
+  ~Data() {}
 
-  // Numbers exp, which must be a Tag expression.
+  // Numbers exp, which must be a Group expression.
   // Updates modes in order to record the mode of exp.
-  // Updates groups iff exp is opening a capturing group.
-  redgrep::Exp Number(redgrep::Exp exp) {
-    int num = exp->tag().first;
-    int mode = exp->tag().second;
-    if (num <= 0) {
-      int left = modes_->size();
-      modes_->push_back(0);
-      int right = modes_->size();
-      modes_->push_back(0);
-      if (num == -1) {
-        groups_->push_back(left);
-        groups_->push_back(right);
-      }
-      num = left;
-      stack_.push_front(right);
-    } else {
-      num = stack_.front();
-      stack_.pop_front();
+  // Updates captures iff exp captures.
+  int Number(redgrep::Exp exp) {
+    redgrep::Mode mode; bool capture;
+    std::tie(std::ignore, std::ignore, mode, capture) = exp->group();
+    int num = num_++;
+    modes_->push_back(mode);
+    if (capture) {
+      captures_->push_back(num);
     }
-    (*modes_)[num] = mode;
-    return redgrep::Tag(num, mode);
+    return num;
   }
 
   llvm::StringRef str_;
   redgrep::Exp* exp_;
 
  private:
-  std::vector<int>* modes_;   // Not owned.
-  std::vector<int>* groups_;  // Not owned.
-  std::list<int> stack_;
+  int num_;
+  std::vector<redgrep::Mode>* modes_;   // Not owned.
+  std::vector<int>* captures_;          // Not owned.
 
   //DISALLOW_COPY_AND_ASSIGN(Data);
   Data(const Data&) = delete;
@@ -125,23 +110,20 @@ expression:
 | expression CONJUNCTION expression
   { $$ = redgrep::Conjunction($1, $3); }
 | COMPLEMENT expression
-  { // This left parenthesis (non-capturing) is minimal.
-    redgrep::Exp left = redgrep::Tag(0, -1);
-    // This right parenthesis is maximal.
-    redgrep::Exp right = redgrep::Tag(1, 1);
-    $$ = redgrep::Complement($2);
-    $$ = redgrep::Concatenation(left, $$, right); }
+  { $$ = redgrep::Complement($2); }
 | expression expression %prec CONCATENATION
   { $$ = redgrep::Concatenation($1, $2); }
 | expression QUANTIFIER
-  { // This left parenthesis (non-capturing) is minimal.
-    redgrep::Exp left = redgrep::Tag(0, -1);
-    redgrep::Exp right; int min; int max;
-    std::tie(right, min, max) = $2->quantifier();
+  { redgrep::Exp sub; int min; int max;
+    std::tie(sub, min, max) = $2->quantifier();
+    redgrep::Mode mode; bool capture;
+    std::tie(std::ignore, std::ignore, mode, capture) = sub->group();
     $$ = redgrep::Quantifier($1, min, max);
-    $$ = redgrep::Concatenation(left, $$, right); }
+    $$ = redgrep::Group(-1, $$, mode, capture); }
 | LEFT_PARENTHESIS expression RIGHT_PARENTHESIS
-  { $$ = redgrep::Concatenation($1, $2, $3); }
+  { redgrep::Mode mode; bool capture;
+    std::tie(std::ignore, std::ignore, mode, capture) = $1->group();
+    $$ = redgrep::Group(-1, $2, mode, capture); }
 | FUNDAMENTAL
   { $$ = $1; }
 
@@ -168,20 +150,17 @@ static bool Character(llvm::StringRef* input,
 }
 
 static bool CharacterClass(llvm::StringRef* input,
-                           std::set<Rune>* character_class,
+                           std::set<Rune>* characters,
                            bool* complement) {
-  character_class->clear();
-  *complement = false;
+  if (input->startswith("^")) {
+    *input = input->drop_front(1);
+    *complement = true;
+  } else {
+    *complement = false;
+  }
   Rune character;
-  for (int i = 0; Character(input, &character); ++i) {
+  while (Character(input, &character)) {
     switch (character) {
-      case '^':
-        if (i == 0) {
-          *complement = true;
-        } else {
-          character_class->insert(character);
-        }
-        break;
       case '\\':
         if (!Character(input, &character)) {
           return false;
@@ -204,7 +183,7 @@ static bool CharacterClass(llvm::StringRef* input,
         }
         // FALLTHROUGH
       default:
-        character_class->insert(character);
+        characters->insert(character);
         break;
       case ']':
         return true;
@@ -296,45 +275,42 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata) {
       if (!Quantifier(character, &yydata->str_, &min, &max)) {
         return TokenType::ERROR;
       }
+      redgrep::Mode mode;
+      bool capture = false;
       if (yydata->str_.startswith("?")) {
         yydata->str_ = yydata->str_.drop_front(1);
-        // This right parenthesis is minimal.
-        *lvalp = redgrep::Tag(1, -1);
+        mode = redgrep::kMinimal;
       } else {
-        // This right parenthesis is maximal.
-        *lvalp = redgrep::Tag(1, 1);
+        mode = redgrep::kMaximal;
       }
-      // Somewhat perversely, we bundle the right parenthesis with min and max
-      // and unbundle them back in the parser action.
+      // Somewhat perversely, we bundle the Group into the Quantifier and then
+      // rebundle them back in the parser action.
+      *lvalp = redgrep::Group(-1, redgrep::Byte(-1), mode, capture);
       *lvalp = redgrep::Quantifier(*lvalp, min, max);
       return TokenType::QUANTIFIER;
     }
-    case '(':
+    case '(': {
+      redgrep::Mode mode = redgrep::kPassive;
+      bool capture;
       if (yydata->str_.startswith("?:")) {
         yydata->str_ = yydata->str_.drop_front(2);
-        // This left parenthesis (non-capturing) is passive.
-        *lvalp = redgrep::Tag(0, 0);
+        capture = false;
       } else {
-        // This left parenthesis (capturing) is passive.
-        *lvalp = redgrep::Tag(-1, 0);
+        capture = true;
       }
+      *lvalp = redgrep::Group(-1, redgrep::Byte(-1), mode, capture);
       return TokenType::LEFT_PARENTHESIS;
+    }
     case ')':
-      // This right parenthesis is passive.
-      *lvalp = redgrep::Tag(1, 0);
       return TokenType::RIGHT_PARENTHESIS;
     case '[': {
-      std::set<Rune> character_class;
+      std::set<Rune> characters;
       bool complement;
-      if (!CharacterClass(&yydata->str_, &character_class, &complement) ||
-          character_class.empty()) {
+      if (!CharacterClass(&yydata->str_, &characters, &complement) ||
+          characters.empty()) {
         return TokenType::ERROR;
       }
-      *lvalp = redgrep::CharacterClass(character_class);
-      if (complement) {
-        *lvalp = redgrep::Conjunction(redgrep::Complement(*lvalp),
-                                      redgrep::AnyCharacter());
-      }
+      *lvalp = redgrep::CharacterClass(characters, complement);
       return TokenType::FUNDAMENTAL;
     }
     case '\\':

@@ -29,13 +29,13 @@ TEST(Compare, EmptyString) {
       EmptyString());
 }
 
-TEST(Compare, Tag) {
+TEST(Compare, Group) {
   EXPECT_EQ(
-      Tag(0, 0),
-      Tag(0, 0));
+      Group(0, Byte('a'), kPassive, true),
+      Group(0, Byte('a'), kPassive, true));
   EXPECT_LT(
-      Tag(0, 0),
-      Tag(1, 0));
+      Group(0, Byte('a'), kPassive, true),
+      Group(1, Byte('a'), kPassive, true));
 }
 
 TEST(Compare, AnyByte) {
@@ -124,10 +124,16 @@ TEST(Normalised, EmptyString) {
       EmptyString());
 }
 
-TEST(Normalised, Tag) {
+TEST(Normalised, Group) {
   EXPECT_NORMALISED(
-      Tag(0, 0),
-      Tag(0, 0));
+      EmptySet(),
+      Group(0, EmptySet(), kPassive, true));
+  EXPECT_NORMALISED(
+      EmptyString(),
+      Group(0, EmptyString(), kPassive, true));
+  EXPECT_NORMALISED(
+      Group(0, Byte('a'), kPassive, true),
+      Group(0, Byte('a'), kPassive, true));
 }
 
 TEST(Normalised, AnyByte) {
@@ -221,9 +227,6 @@ TEST(Normalised, Conjunction) {
   EXPECT_NORMALISED(
       Byte('a'),
       Conjunction(Byte('a'), Complement(EmptySet())));
-  EXPECT_NORMALISED(
-      EmptySet(),
-      Conjunction(EmptyString(), Complement(EmptyString())));
 }
 
 TEST(Normalised, Disjunction) {
@@ -272,10 +275,10 @@ TEST(IsNullable, EmptyString) {
       EmptyString());
 }
 
-TEST(IsNullable, Tag) {
+TEST(IsNullable, Group) {
   EXPECT_ISNULLABLE(
       false,
-      Tag(0, 0));
+      Group(0, Byte('a'), kPassive, true));
 }
 
 TEST(IsNullable, AnyByte) {
@@ -343,10 +346,8 @@ TEST(Derivative, EmptyString) {
       EmptyString());
 }
 
-TEST(Derivative, Tag) {
-  EXPECT_DERIVATIVE(
-      EmptySet(),
-      Tag(0, 0));
+TEST(Derivative, Group) {
+  // This should never happen.
 }
 
 TEST(Derivative, AnyByte) {
@@ -406,43 +407,40 @@ TEST(Derivative, Disjunction) {
       Disjunction(Byte('a'), Byte('b')));
 }
 
-#define EXPECT_PARTIAL(expected, exp)                   \
-  do {                                                  \
-    EXPECT_EQ(expected, Normalised(Partial(exp, 'a'))); \
+#define EXPECT_OUTERSET(expected, outer)  \
+  do {                                    \
+    list<Exp> subs;                       \
+    for (const auto& i : *outer) {        \
+      subs.push_back(i.first);            \
+    }                                     \
+    Exp exp = Disjunction(subs, false);   \
+    EXPECT_EQ(expected, Normalised(exp)); \
   } while (0)
 
-TEST(Partial, Helpers) {
-  EXPECT_PARTIAL(
-      Disjunction(
-          Concatenation(
-              Byte('3'),
-              Byte('4')),
-          Concatenation(
-              Conjunction(Byte('1'), Byte('2')),
-              Byte('4'))),
-      Concatenation(
+TEST(OuterSet, PartialConcatenation) {
+  Outer outer = PartialConcatenation(
+      Denormalised(
           Disjunction(
-              Concatenation(
-                  Byte('a'),
-                  Conjunction(Byte('1'), Byte('2'))),
-              Concatenation(
-                  Byte('a'),
-                  Byte('3'))),
-          Byte('4')));
-  EXPECT_PARTIAL(
+              Conjunction(Byte('1'), Byte('2')),
+              Byte('3'))),
+      Byte('4'),
+      list<Binding>({}));
+  EXPECT_OUTERSET(
       Disjunction(
-          Conjunction(Byte('1'), Byte('3')),
-          Conjunction(Byte('1'), Byte('4')),
-          Conjunction(Byte('2'), Byte('3')),
-          Conjunction(Byte('2'), Byte('4'))),
-      Conjunction(
-          Concatenation(
-              Byte('a'),
-              Disjunction(Byte('1'), Byte('2'))),
-          Concatenation(
-              Byte('a'),
-              Disjunction(Byte('3'), Byte('4')))));
-  EXPECT_PARTIAL(
+          Concatenation(Byte('3'), Byte('4')),
+          Conjunction(
+              Concatenation(Byte('1'), Byte('4')),
+              Concatenation(Byte('2'), Byte('4')))),
+      outer);
+}
+
+TEST(OuterSet, PartialComplement) {
+  Outer outer = PartialComplement(
+      Denormalised(
+          Disjunction(
+              Conjunction(Byte('1'), Byte('2')),
+              Byte('3'))));
+  EXPECT_OUTERSET(
       Disjunction(
           Conjunction(
               Complement(Byte('1')),
@@ -450,13 +448,40 @@ TEST(Partial, Helpers) {
           Conjunction(
               Complement(Byte('2')),
               Complement(Byte('3')))),
-      Complement(
-          Concatenation(
-              Byte('a'),
-              Disjunction(
-                  Conjunction(Byte('1'), Byte('2')),
-                  Byte('3')))));
+      outer);
 }
+
+TEST(OuterSet, PartialConjunction) {
+  Outer outer = PartialConjunction(
+      Denormalised(
+          Disjunction(Byte('1'), Byte('2'))),
+      Denormalised(
+          Disjunction(Byte('3'), Byte('4'))));
+  EXPECT_OUTERSET(
+      Disjunction(
+          Conjunction(Byte('1'), Byte('3')),
+          Conjunction(Byte('1'), Byte('4')),
+          Conjunction(Byte('2'), Byte('3')),
+          Conjunction(Byte('2'), Byte('4'))),
+      outer);
+}
+
+TEST(OuterSet, PartialDisjunction) {
+  Outer outer = PartialDisjunction(
+      Denormalised(
+          Disjunction(Byte('1'), Byte('2'))),
+      Denormalised(
+          Disjunction(Byte('3'), Byte('4'))));
+  EXPECT_OUTERSET(
+      Disjunction(Byte('1'), Byte('2'), Byte('3'), Byte('4')),
+      outer);
+}
+
+#define EXPECT_PARTIAL(expected, exp) \
+  do {                                \
+    Outer outer = Partial(exp, 'a');  \
+    EXPECT_OUTERSET(expected, outer); \
+  } while (0)
 
 TEST(Partial, EmptySet) {
   EXPECT_PARTIAL(
@@ -470,10 +495,10 @@ TEST(Partial, EmptyString) {
       EmptyString());
 }
 
-TEST(Partial, Tag) {
+TEST(Partial, Group) {
   EXPECT_PARTIAL(
-      EmptySet(),
-      Tag(0, 0));
+      EmptyString(),
+      Group(0, Byte('a'), kPassive, true));
 }
 
 TEST(Partial, AnyByte) {
@@ -533,84 +558,6 @@ TEST(Partial, Disjunction) {
       Disjunction(Byte('a'), Byte('b')));
 }
 
-#define EXPECT_EPSILON(expected, exp)               \
-  do {                                              \
-    EXPECT_EQ(expected, Normalised(Epsilon(exp)));  \
-  } while (0)
-
-TEST(Epsilon, EmptySet) {
-  EXPECT_EPSILON(
-      EmptySet(),
-      EmptySet());
-}
-
-TEST(Epsilon, EmptyString) {
-  EXPECT_EPSILON(
-      EmptyString(),
-      EmptyString());
-}
-
-TEST(Epsilon, Tag) {
-  EXPECT_EPSILON(
-      Tag(0, 0),
-      Tag(0, 0));
-}
-
-TEST(Epsilon, AnyByte) {
-  EXPECT_EPSILON(
-      AnyByte(),
-      AnyByte());
-}
-
-TEST(Epsilon, Byte) {
-  EXPECT_EPSILON(
-      Byte('a'),
-      Byte('a'));
-}
-
-TEST(Epsilon, ByteRange) {
-  EXPECT_EPSILON(
-      ByteRange('a', 'c'),
-      ByteRange('a', 'c'));
-}
-
-TEST(Epsilon, KleeneClosure) {
-  EXPECT_EPSILON(
-      Disjunction(
-          EmptyString(),
-          Concatenation(Byte('a'), KleeneClosure(Byte('a')))),
-      KleeneClosure(Byte('a')));
-}
-
-TEST(Epsilon, Concatenation) {
-  EXPECT_EPSILON(
-      Concatenation(Byte('a'), Byte('b')),
-      Concatenation(Byte('a'), Byte('b')));
-  EXPECT_EPSILON(
-      Disjunction(
-          Byte('b'),
-          Concatenation(Byte('a'), KleeneClosure(Byte('a')), Byte('b'))),
-      Concatenation(KleeneClosure(Byte('a')), Byte('b')));
-}
-
-TEST(Epsilon, Complement) {
-  EXPECT_EPSILON(
-      Complement(Byte('a')),
-      Complement(Byte('a')));
-}
-
-TEST(Epsilon, Conjunction) {
-  EXPECT_EPSILON(
-      Conjunction(Byte('a'), Byte('b')),
-      Conjunction(Byte('a'), Byte('b')));
-}
-
-TEST(Epsilon, Disjunction) {
-  EXPECT_EPSILON(
-      Disjunction(Byte('a'), Byte('b')),
-      Disjunction(Byte('a'), Byte('b')));
-}
-
 #define EXPECT_PARTITIONS(expected, exp)  \
   do {                                    \
     list<bitset<256>> partitions;         \
@@ -640,10 +587,11 @@ TEST(Partitions, EmptyString) {
       EmptyString());
 }
 
-TEST(Partitions, Tag) {
+TEST(Partitions, Group) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet()}),
-      Tag(0, 0));
+      list<bitset<256>>({BitSet('a'),
+                         BitSet('a')}),
+      Group(0, Byte('a'), kPassive, true));
 }
 
 TEST(Partitions, AnyByte) {
@@ -981,213 +929,193 @@ TEST(Parse, Disjunction) {
       "a|b|c");
 }
 
-#define EXPECT_PARSE_M_G(expected, expected_modes, expected_groups, str)  \
-  do {                                                                    \
-    Exp exp;                                                              \
-    vector<int> modes;                                                    \
-    vector<int> groups;                                                   \
-    ASSERT_TRUE(Parse(str, &exp, &modes, &groups));                       \
-    EXPECT_EQ(expected, exp);                                             \
-    EXPECT_EQ(expected_modes, modes);                                     \
-    EXPECT_EQ(expected_groups, groups);                                   \
+#define EXPECT_PARSE_M_C(expected, expected_modes, expected_captures, str)  \
+  do {                                                                      \
+    Exp exp;                                                                \
+    vector<Mode> modes;                                                     \
+    vector<int> captures;                                                   \
+    ASSERT_TRUE(Parse(str, &exp, &modes, &captures));                       \
+    EXPECT_EQ(expected, exp);                                               \
+    EXPECT_EQ(expected_modes, modes);                                       \
+    EXPECT_EQ(expected_captures, captures);                                 \
   } while (0)
 
-TEST(Parse_M_G, Tags) {
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, 0),
-          Concatenation(
-              Byte('a'),
-              Byte('b')),
-          Tag(1, 0)),
-      vector<int>({0, 0}),
+TEST(Parse_M_C, Parentheses) {
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Concatenation(
+                Byte('a'),
+                Byte('b')),
+            kPassive, false),
+      vector<Mode>({kPassive}),
       vector<int>({}),
       "(?:ab)");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, 0),
-          Concatenation(
-              Byte('a'),
-              Byte('b')),
-          Tag(1, 0)),
-      vector<int>({0, 0}),
-      vector<int>({0, 1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Concatenation(
+                Byte('a'),
+                Byte('b')),
+            kPassive, true),
+      vector<Mode>({kPassive}),
+      vector<int>({0}),
       "(ab)");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, 0),
-          Concatenation(
-              Concatenation(
-                  Tag(2, 0),
-                  Byte('a'),
-                  Tag(3, 0)),
-              Byte('b')),
-          Tag(1, 0)),
-      vector<int>({0, 0, 0, 0}),
-      vector<int>({0, 1, 2, 3}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Concatenation(
+                Group(1,
+                      Byte('a'),
+                      kPassive, true),
+                Byte('b')),
+            kPassive, true),
+      vector<Mode>({kPassive, kPassive}),
+      vector<int>({0, 1}),
       "((a)b)");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, 0),
-          Concatenation(
-              Byte('a'),
-              Concatenation(
-                  Tag(2, 0),
-                  Byte('b'),
-                  Tag(3, 0))),
-          Tag(1, 0)),
-      vector<int>({0, 0, 0, 0}),
-      vector<int>({0, 1, 2, 3}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Concatenation(
+                Byte('a'),
+                Group(1,
+                      Byte('b'),
+                      kPassive, true)),
+            kPassive, true),
+      vector<Mode>({kPassive, kPassive}),
+      vector<int>({0, 1}),
       "(a(b))");
-  EXPECT_PARSE_M_G(
+  EXPECT_PARSE_M_C(
       Concatenation(
-          Concatenation(
-              Tag(0, 0),
-              Byte('a'),
-              Tag(1, 0)),
-          Concatenation(
-              Tag(2, 0),
-              Byte('b'),
-              Tag(3, 0))),
-      vector<int>({0, 0, 0, 0}),
-      vector<int>({0, 1, 2, 3}),
+          Group(0,
+                Byte('a'),
+                kPassive, true),
+          Group(1,
+                Byte('b'),
+                kPassive, true)),
+      vector<Mode>({kPassive, kPassive}),
+      vector<int>({0, 1}),
       "(a)(b)");
 }
 
-TEST(Parse_M_G, Quantifiers) {
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          KleeneClosure(Byte('a')),
-          Tag(1, 1)),
-      vector<int>({-1, 1}),
+TEST(Parse_M_C, Quantifiers) {
+  EXPECT_PARSE_M_C(
+      Group(0,
+            KleeneClosure(Byte('a')),
+            kMaximal, false),
+      vector<Mode>({kMaximal}),
       vector<int>({}),
       "a*");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          KleeneClosure(Byte('a')),
-          Tag(1, -1)),
-      vector<int>({-1, -1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            KleeneClosure(Byte('a')),
+            kMinimal, false),
+      vector<Mode>({kMinimal}),
       vector<int>({}),
       "a*?");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Concatenation(
-              Byte('a'),
-              KleeneClosure(Byte('a'))),
-          Tag(1, 1)),
-      vector<int>({-1, 1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Concatenation(
+                Byte('a'),
+                KleeneClosure(Byte('a'))),
+            kMaximal, false),
+      vector<Mode>({kMaximal}),
       vector<int>({}),
       "a+");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Concatenation(
-              Byte('a'),
-              KleeneClosure(Byte('a'))),
-          Tag(1, -1)),
-      vector<int>({-1, -1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Concatenation(
+                Byte('a'),
+                KleeneClosure(Byte('a'))),
+            kMinimal, false),
+      vector<Mode>({kMinimal}),
       vector<int>({}),
       "a+?");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Disjunction(
-              EmptyString(),
-              Byte('a')),
-          Tag(1, 1)),
-      vector<int>({-1, 1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Disjunction(
+                EmptyString(),
+                Byte('a')),
+            kMaximal, false),
+      vector<Mode>({kMaximal}),
       vector<int>({}),
       "a?");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Disjunction(
-              EmptyString(),
-              Byte('a')),
-          Tag(1, -1)),
-      vector<int>({-1, -1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Disjunction(
+                EmptyString(),
+                Byte('a')),
+            kMinimal, false),
+      vector<Mode>({kMinimal}),
       vector<int>({}),
       "a??");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Byte('a'),
-          Tag(1, 1)),
-      vector<int>({-1, 1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Byte('a'),
+            kMaximal, false),
+      vector<Mode>({kMaximal}),
       vector<int>({}),
       "a{1}");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Byte('a'),
-          Tag(1, -1)),
-      vector<int>({-1, -1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Byte('a'),
+            kMinimal, false),
+      vector<Mode>({kMinimal}),
       vector<int>({}),
       "a{1}?");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Concatenation(
-              Byte('a'),
-              KleeneClosure(Byte('a'))),
-          Tag(1, 1)),
-      vector<int>({-1, 1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Concatenation(
+                Byte('a'),
+                KleeneClosure(Byte('a'))),
+            kMaximal, false),
+      vector<Mode>({kMaximal}),
       vector<int>({}),
       "a{1,}");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Concatenation(
-              Byte('a'),
-              KleeneClosure(Byte('a'))),
-          Tag(1, -1)),
-      vector<int>({-1, -1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Concatenation(
+                Byte('a'),
+                KleeneClosure(Byte('a'))),
+            kMinimal, false),
+      vector<Mode>({kMinimal}),
       vector<int>({}),
       "a{1,}?");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Concatenation(
-              Byte('a'),
-              Disjunction(
-                  EmptyString(),
-                  Byte('a'))),
-          Tag(1, 1)),
-      vector<int>({-1, 1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Concatenation(
+                Byte('a'),
+                Disjunction(
+                    EmptyString(),
+                    Byte('a'))),
+            kMaximal, false),
+      vector<Mode>({kMaximal}),
       vector<int>({}),
       "a{1,2}");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Concatenation(
-              Byte('a'),
-              Disjunction(
-                  EmptyString(),
-                  Byte('a'))),
-          Tag(1, -1)),
-      vector<int>({-1, -1}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Concatenation(
+                Byte('a'),
+                Disjunction(
+                    EmptyString(),
+                    Byte('a'))),
+            kMinimal, false),
+      vector<Mode>({kMinimal}),
       vector<int>({}),
       "a{1,2}?");
 }
 
-TEST(Parse_M_G, ApplyTagsWithinDisjunctions) {
-  EXPECT_PARSE_M_G(
+TEST(Parse_M_C, ApplyGroups) {
+  EXPECT_PARSE_M_C(
       AnyCharacter(),
-      vector<int>({}),
+      vector<Mode>({}),
       vector<int>({}),
       ".");
-  EXPECT_PARSE_M_G(
+  EXPECT_PARSE_M_C(
       Disjunction(
           Byte('a'),
           Byte('b'),
           Byte('c')),
-      vector<int>({}),
+      vector<Mode>({}),
       vector<int>({}),
       "[abc]");
-  EXPECT_PARSE_M_G(
+  EXPECT_PARSE_M_C(
       Conjunction(
           Complement(
               Disjunction(
@@ -1195,36 +1123,34 @@ TEST(Parse_M_G, ApplyTagsWithinDisjunctions) {
                   Byte('b'),
                   Byte('c'))),
           AnyCharacter()),
-      vector<int>({}),
+      vector<Mode>({}),
       vector<int>({}),
       "[^abc]");
-  EXPECT_PARSE_M_G(
+  EXPECT_PARSE_M_C(
       Disjunction(
-          Concatenation(Byte('a'), Byte('a'), Byte('a')),
-          Concatenation(Byte('b'), Byte('b'), Byte('b')),
-          Concatenation(Byte('c'), Byte('c'), Byte('c'))),
-      vector<int>({}),
+          Group(0,
+                Concatenation(Byte('a'), Byte('a'), Byte('a')),
+                kPassive, false),
+          Group(1,
+                Concatenation(Byte('b'), Byte('b'), Byte('b')),
+                kPassive, false),
+          Group(2,
+                Concatenation(Byte('c'), Byte('c'), Byte('c')),
+                kPassive, false)),
+      vector<Mode>({kPassive, kPassive, kPassive}),
       vector<int>({}),
       "aaa|bbb|ccc");
-}
-
-TEST(Parse_M_G, StripTagsWithinComplements) {
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Complement(Byte('a')),
-          Tag(1, 1)),
-      vector<int>({-1, 1, 0, 0}),
+  EXPECT_PARSE_M_C(
+      Group(0,
+            Complement(
+                Concatenation(
+                    Byte('a'),
+                    Byte('b'),
+                    Byte('c'))),
+            kMaximal, false),
+      vector<Mode>({kMaximal}),
       vector<int>({}),
-      "!(?:a)");
-  EXPECT_PARSE_M_G(
-      Concatenation(
-          Tag(0, -1),
-          Complement(Byte('a')),
-          Tag(1, 1)),
-      vector<int>({-1, 1, 0, 0}),
-      vector<int>({2, 3}),
-      "!(a)");
+      "!abc");
 }
 
 #define EXPECT_MATCH(expected, expected_values, str)  \
@@ -1248,7 +1174,7 @@ class MatchTest : public testing::Test {
  protected:
   void ParseAll(llvm::StringRef str) {
     ASSERT_TRUE(Parse(str, &exp1_));
-    ASSERT_TRUE(Parse(str, &exp2_, &tnfa_.modes_, &tnfa_.groups_));
+    ASSERT_TRUE(Parse(str, &exp2_, &tnfa_.modes_, &tnfa_.captures_));
   }
 
   void CompileAll() {
@@ -1538,7 +1464,7 @@ TEST_F(MatchTest, Complement) {
   EXPECT_MATCH(true, vector<int>({0, 3}), "aaa");
 }
 
-TEST_F(MatchTest, Conjunction) {
+TEST_F(MatchTest, Conjunction_1) {
   ParseAll("(a.)&(.b)");
   CompileAll();
   EXPECT_MATCH(false, vector<int>({}), "aa");
@@ -1547,13 +1473,46 @@ TEST_F(MatchTest, Conjunction) {
   EXPECT_MATCH(false, vector<int>({}), "bb");
 }
 
-TEST_F(MatchTest, Disjunction) {
+TEST_F(MatchTest, Conjunction_2) {
+  ParseAll("(a.*)&(.*b)");
+  CompileAll();
+  EXPECT_MATCH(false, vector<int>({}), "aa");
+  EXPECT_MATCH(true, vector<int>({0, 2, 0, 2}), "ab");
+  EXPECT_MATCH(false, vector<int>({}), "ba");
+  EXPECT_MATCH(false, vector<int>({}), "bb");
+  EXPECT_MATCH(false, vector<int>({}), "aXa");
+  EXPECT_MATCH(true, vector<int>({0, 3, 0, 3}), "aXb");
+  EXPECT_MATCH(false, vector<int>({}), "bXa");
+  EXPECT_MATCH(false, vector<int>({}), "bXb");
+}
+
+TEST_F(MatchTest, Disjunction_1) {
   ParseAll("(a.)|(.b)");
   CompileAll();
   EXPECT_MATCH(true, vector<int>({0, 2, -1, -1}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 2, -1, -1}), "ab");
   EXPECT_MATCH(false, vector<int>({}), "ba");
   EXPECT_MATCH(true, vector<int>({-1, -1, 0, 2}), "bb");
+}
+
+TEST_F(MatchTest, Disjunction_2) {
+  ParseAll("(a.*)|(.*b)");
+  CompileAll();
+  EXPECT_MATCH(true, vector<int>({0, 2, -1, -1}), "aa");
+  EXPECT_MATCH(true, vector<int>({0, 2, -1, -1}), "ab");
+  EXPECT_MATCH(false, vector<int>({}), "ba");
+  EXPECT_MATCH(true, vector<int>({-1, -1, 0, 2}), "bb");
+  EXPECT_MATCH(true, vector<int>({0, 3, -1, -1}), "aXa");
+  EXPECT_MATCH(true, vector<int>({0, 3, -1, -1}), "aXb");
+  EXPECT_MATCH(false, vector<int>({}), "bXa");
+  EXPECT_MATCH(true, vector<int>({-1, -1, 0, 3}), "bXb");
+}
+
+// http://swtch.com/~rsc/regexp/regexp2.html#posix
+TEST_F(MatchTest, PerlSemantics) {
+  ParseAll("(a|bcdef|g|ab|c|d|e|efg|fg)*");
+  CompileAll();
+  EXPECT_MATCH(true, vector<int>({6, 7}), "abcdefg");
 }
 
 }  // namespace redgrep
