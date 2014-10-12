@@ -271,19 +271,19 @@ enum BindingType {
   kAppend,
 };
 
-typedef pair<int, BindingType> Binding;
+typedef list<pair<int, BindingType>> Bindings;
 
 // Conceptually, an OuterSet is a Disjunction and an InnerSet is a Conjunction.
 // For simplicity, we don't introduce a new type for the latter, but the former
 // needs to associate each InnerSet with its Bindings.
-typedef list<pair<Exp, list<Binding>>> OuterSet;
+typedef list<pair<Exp, Bindings>> OuterSet;
 typedef std::unique_ptr<OuterSet> Outer;
 
 // Returns the denormalised form of exp.
 Outer Denormalised(Exp exp);
 
 // Partial() helpers for building OuterSets. Exposed for ease of testing.
-Outer PartialConcatenation(Outer x, Exp y, const list<Binding>& initial);
+Outer PartialConcatenation(Outer x, Exp y, const Bindings& initial);
 Outer PartialComplement(Outer x);
 Outer PartialConjunction(Outer x, Outer y);
 Outer PartialDisjunction(Outer x, Outer y);
@@ -355,8 +355,8 @@ class TNFA : public FA {
   vector<Mode> modes_;
   vector<int> captures_;
 
-  multimap<pair<int, int>, pair<int, list<Binding>>> transition_;
-  map<int, list<Binding>> final_;
+  multimap<pair<int, int>, pair<int, Bindings>> transition_;
+  map<int, Bindings> final_;
 
  private:
   //DISALLOW_COPY_AND_ASSIGN(TNFA);

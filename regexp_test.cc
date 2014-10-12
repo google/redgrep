@@ -424,7 +424,7 @@ TEST(OuterSet, PartialConcatenation) {
               Conjunction(Byte('1'), Byte('2')),
               Byte('3'))),
       Byte('4'),
-      list<Binding>({}));
+      Bindings({}));
   EXPECT_OUTERSET(
       Disjunction(
           Concatenation(Byte('3'), Byte('4')),

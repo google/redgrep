@@ -663,12 +663,12 @@ Outer Denormalised(Exp exp) {
     if (sub->kind() != kConjunction) {
       sub = Conjunction({sub}, false);
     }
-    outer->push_back(make_pair(sub, list<Binding>({})));
+    outer->push_back(make_pair(sub, Bindings({})));
   }
   return outer;
 }
 
-Outer PartialConcatenation(Outer x, Exp y, const list<Binding>& initial) {
+Outer PartialConcatenation(Outer x, Exp y, const Bindings& initial) {
   // We mutate x as an optimisation.
   for (auto& xi : *x) {
     list<Exp> subs;
@@ -689,7 +689,7 @@ Outer PartialComplement(Outer x) {
     for (Exp sub : xi.first->subexpressions()) {
       sub = Complement(sub);
       sub = Conjunction({sub}, false);
-      tmp->push_back(make_pair(sub, list<Binding>({})));
+      tmp->push_back(make_pair(sub, Bindings({})));
     }
     if (outer == nullptr) {
       outer = std::move(tmp);
@@ -705,7 +705,7 @@ Outer PartialConjunction(Outer x, Outer y) {
   for (const auto& xi : *x) {
     for (const auto& yi : *y) {
       Exp sub = Conjunction(xi.first, yi.first);
-      list<Binding> bindings;
+      Bindings bindings;
       bindings.insert(bindings.end(), xi.second.begin(), xi.second.end());
       bindings.insert(bindings.end(), yi.second.begin(), yi.second.end());
       outer->push_back(make_pair(sub, bindings));
@@ -721,7 +721,7 @@ Outer PartialDisjunction(Outer x, Outer y) {
 }
 
 // Computes the cancel Bindings for exp.
-static void CancelBindings(Exp exp, list<Binding>* bindings) {
+static void CancelBindings(Exp exp, Bindings* bindings) {
   switch (exp->kind()) {
     case kEmptySet:
     case kEmptyString:
@@ -767,7 +767,7 @@ static void CancelBindings(Exp exp, list<Binding>* bindings) {
 }
 
 // Computes the epsilon Bindings for exp.
-static void EpsilonBindings(Exp exp, list<Binding>* bindings) {
+static void EpsilonBindings(Exp exp, Bindings* bindings) {
   switch (exp->kind()) {
     case kEmptySet:
     case kEmptyString:
@@ -869,7 +869,7 @@ Outer Partial(Exp exp, int byte) {
 
     case kKleeneClosure: {
       // ∂a(r∗) = ∂ar · r∗
-      list<Binding> cancel;
+      Bindings cancel;
       CancelBindings(exp->sub(), &cancel);
       return PartialConcatenation(Partial(exp->sub(), byte),
                                   exp,
@@ -879,19 +879,19 @@ Outer Partial(Exp exp, int byte) {
     case kConcatenation:
       // ∂a(r · s) = ∂ar · s + ν(r) · ∂as
       if (IsNullable(exp->head())) {
-        list<Binding> epsilon;
+        Bindings epsilon;
         EpsilonBindings(exp->head(), &epsilon);
         return PartialDisjunction(
             PartialConcatenation(Partial(exp->head(), byte),
                                  exp->tail(),
-                                 list<Binding>({})),
+                                 Bindings({})),
             PartialConcatenation(Partial(exp->tail(), byte),
                                  EmptyString(),
                                  epsilon));
       } else {
         return PartialConcatenation(Partial(exp->head(), byte),
                                     exp->tail(),
-                                    list<Binding>({}));
+                                    Bindings({}));
       }
 
     case kComplement:
@@ -1445,7 +1445,7 @@ inline size_t CompileImpl(Exp exp, bool tagged, FA* fa) {
       if (tagged) {
         TNFA* tnfa = reinterpret_cast<TNFA*>(fa);
         Outer outer = Partial(exp, byte);
-        set<pair<int, list<Binding>>> seen;
+        set<pair<int, Bindings>> seen;
         for (const auto& j : *outer) {
           Exp par = Normalised(j.first);
           int next = LookupOrInsert(par);
@@ -1511,7 +1511,7 @@ bool Match(const DFA& dfa, llvm::StringRef str) {
 }
 
 // Applies the Bindings to offsets using pos.
-static void ApplyBindings(const list<Binding>& bindings,
+static void ApplyBindings(const Bindings& bindings,
                           int pos,
                           vector<int>* offsets) {
   for (const auto& i : bindings) {

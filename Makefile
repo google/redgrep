@@ -25,6 +25,7 @@ LLVM_CONFIG ?=	llvm-config
 CFLAGS +=	$(shell $(LLVM_CONFIG) --cflags)
 CXXFLAGS +=	$(shell $(LLVM_CONFIG) --cxxflags)
 LDLIBS +=	$(shell $(LLVM_CONFIG) --ldflags) \
+		-R$(shell $(LLVM_CONFIG) --libdir) \
 		-lLLVM-$(shell $(LLVM_CONFIG) --version)
 
 .PHONY: all
