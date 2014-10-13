@@ -311,11 +311,15 @@ bool Match(Exp exp, llvm::StringRef str);
 // Represents a finite automaton.
 class FA {
  public:
-  FA() : error_(-1) {}
+  FA() : error_(-1), empty_(-1) {}
   virtual ~FA() {}
 
   bool IsError(int state) const {
     return state == error_;
+  }
+
+  bool IsEmpty(int state) const {
+    return state == empty_;
   }
 
   bool IsAccepting(int state) const {
@@ -323,6 +327,7 @@ class FA {
   }
 
   int error_;
+  int empty_;
   map<int, bool> accepting_;
   map<int, list<bitset<256>>> partitions_;
 

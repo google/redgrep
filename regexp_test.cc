@@ -1455,13 +1455,22 @@ TEST_F(MatchTest, Concatenation) {
   EXPECT_MATCH(false, vector<int>({}), "aaa");
 }
 
-TEST_F(MatchTest, Complement) {
+TEST_F(MatchTest, Complement_1) {
   ParseAll("(!a)");
   CompileAll();
   EXPECT_MATCH(true, vector<int>({0, 0}), "");
   EXPECT_MATCH(false, vector<int>({}), "a");
   EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
   EXPECT_MATCH(true, vector<int>({0, 3}), "aaa");
+}
+
+TEST_F(MatchTest, Complement_2) {
+  ParseAll("(!(a))");
+  CompileAll();
+  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1}), "");
+  EXPECT_MATCH(false, vector<int>({}), "a");
+  EXPECT_MATCH(true, vector<int>({0, 2, -1, -1}), "aa");
+  EXPECT_MATCH(true, vector<int>({0, 3, -1, -1}), "aaa");
 }
 
 TEST_F(MatchTest, Conjunction_1) {
@@ -1508,8 +1517,26 @@ TEST_F(MatchTest, Disjunction_2) {
   EXPECT_MATCH(true, vector<int>({-1, -1, 0, 3}), "bXb");
 }
 
+TEST_F(MatchTest, PerlSemantics_1) {
+  ParseAll("(?:(a*?)|(a*))(a*)");
+  CompileAll();
+  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1, 0, 0}), "");
+  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1, 0, 1}), "a");
+  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1, 0, 2}), "aa");
+  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1, 0, 3}), "aaa");
+}
+
+TEST_F(MatchTest, PerlSemantics_2) {
+  ParseAll("(?:(a*)|(a*?))(a*)");
+  CompileAll();
+  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1, 0, 0}), "");
+  EXPECT_MATCH(true, vector<int>({0, 1, -1, -1, 1, 1}), "a");
+  EXPECT_MATCH(true, vector<int>({0, 2, -1, -1, 2, 2}), "aa");
+  EXPECT_MATCH(true, vector<int>({0, 3, -1, -1, 3, 3}), "aaa");
+}
+
 // http://swtch.com/~rsc/regexp/regexp2.html#posix
-TEST_F(MatchTest, PerlSemantics) {
+TEST_F(MatchTest, PerlSemantics_3) {
   ParseAll("(a|bcdef|g|ab|c|d|e|efg|fg)*");
   CompileAll();
   EXPECT_MATCH(true, vector<int>({6, 7}), "abcdefg");

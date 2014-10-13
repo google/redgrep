@@ -16,7 +16,7 @@ YACC :=		bison
 CC :=		gcc
 CFLAGS :=	-Wall -Wextra -funsigned-char
 CXX :=		g++
-CXXFLAGS :=	-std=c++0x $(CFLAGS)
+CXXFLAGS :=	$(CFLAGS)
 CPPFLAGS :=	-I.
 LDFLAGS :=	
 LDLIBS :=	-lpthread -lstdc++

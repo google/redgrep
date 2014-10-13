@@ -1420,6 +1420,9 @@ inline size_t CompileImpl(Exp exp, bool tagged, FA* fa) {
     if (exp->kind() == kEmptySet) {
       fa->error_ = curr;
     }
+    if (exp->kind() == kEmptyString) {
+      fa->empty_ = curr;
+    }
     if (IsNullable(exp)) {
       fa->accepting_[curr] = true;
       if (tagged) {
