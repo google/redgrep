@@ -32,50 +32,12 @@ class location;
 
 namespace redgrep_yy {
 
-class Data {
- public:
-  Data(llvm::StringRef str, redgrep::Exp* exp)
-      : str_(str),
-        exp_(exp),
-        num_(0),
-        modes_(nullptr),
-        captures_(nullptr) {}
-
-  Data(llvm::StringRef str, redgrep::Exp* exp,
-       std::vector<redgrep::Mode>* modes, std::vector<int>* captures)
-      : str_(str),
-        exp_(exp),
-        num_(0),
-        modes_(modes),
-        captures_(captures) {}
-
+struct Data {
+  Data(llvm::StringRef str, redgrep::Exp* exp) : str_(str), exp_(exp) {}
   ~Data() {}
-
-  // Numbers exp, which must be a Group expression.
-  // Updates modes in order to record the mode of exp.
-  // Updates captures iff exp captures.
-  int Number(redgrep::Exp exp) {
-    redgrep::Mode mode; bool capture;
-    std::tie(std::ignore, std::ignore, mode, capture) = exp->group();
-    int num = num_++;
-    modes_->push_back(mode);
-    if (capture) {
-      captures_->push_back(num);
-    }
-    return num;
-  }
 
   llvm::StringRef str_;
   redgrep::Exp* exp_;
-
- private:
-  int num_;
-  std::vector<redgrep::Mode>* modes_;   // Not owned.
-  std::vector<int>* captures_;          // Not owned.
-
-  //DISALLOW_COPY_AND_ASSIGN(Data);
-  Data(const Data&) = delete;
-  void operator=(const Data&) = delete;
 };
 
 }  // namespace redgrep_yy

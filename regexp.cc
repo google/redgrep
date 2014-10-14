@@ -1283,19 +1283,26 @@ class ApplyGroups : public Walker {
 
 class NumberGroups : public Walker {
  public:
-  explicit NumberGroups(redgrep_yy::Data* yydata) : yydata_(yydata) {}
+  NumberGroups(vector<Mode>* modes, vector<int>* captures)
+      : num_(0), modes_(modes), captures_(captures) {}
   ~NumberGroups() override {}
 
   Exp WalkGroup(Exp exp) override {
-    int num = yydata_->Number(exp);
     Exp sub; Mode mode; bool capture;
     std::tie(std::ignore, sub, mode, capture) = exp->group();
+    int num = num_++;
+    modes_->push_back(mode);
+    if (capture) {
+      captures_->push_back(num);
+    }
     sub = Walk(sub);
     return Group(num, sub, mode, capture);
   }
 
  private:
-  redgrep_yy::Data* yydata_;
+  int num_;
+  vector<Mode>* modes_;
+  vector<int>* captures_;
 
   //DISALLOW_COPY_AND_ASSIGN(NumberGroups);
   NumberGroups(const NumberGroups&) = delete;
@@ -1372,12 +1379,12 @@ bool Parse(llvm::StringRef str, Exp* exp) {
 
 bool Parse(llvm::StringRef str, Exp* exp,
            vector<Mode>* modes, vector<int>* captures) {
-  redgrep_yy::Data yydata(str, exp, modes, captures);
+  redgrep_yy::Data yydata(str, exp);
   redgrep_yy::parser parser(&yydata);
   if (parser.parse() == 0) {
     *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
     *exp = ApplyGroups().Walk(*exp);
-    *exp = NumberGroups(&yydata).Walk(*exp);
+    *exp = NumberGroups(modes, captures).Walk(*exp);
     *exp = ExpandCharacterClasses().Walk(*exp);
     *exp = ExpandQuantifiers().Walk(*exp);
     return true;
