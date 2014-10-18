@@ -14,13 +14,13 @@
 
 #include "regexp.h"
 
-#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <bitset>
 #include <list>
 #include <map>
+#include <mutex>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -1651,18 +1651,15 @@ class TypeBuilder<bool, false> : public TypeBuilder<types::i<1>, false> {};
 
 namespace redgrep {
 
-static pthread_once_t once = PTHREAD_ONCE_INIT;
-
-static void InitializeNativeTarget() {
-  llvm::InitializeNativeTarget();
-  llvm::InitializeNativeTargetAsmPrinter();
-  llvm::InitializeNativeTargetAsmParser();
-}
-
 typedef bool NativeMatch(const char*, int);
 
 Fun::Fun() {
-  pthread_once(&once, &InitializeNativeTarget);
+  static std::once_flag once_flag;
+  std::call_once(once_flag, []() {
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+    llvm::InitializeNativeTargetAsmParser();
+  });
   context_.reset(new llvm::LLVMContext);
   module_ = new llvm::Module("M", *context_);
   engine_.reset(
