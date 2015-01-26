@@ -30,7 +30,7 @@
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
-#include "llvm/ExecutionEngine/ObjectImage.h"
+#include "llvm/ExecutionEngine/RuntimeDyld.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -43,6 +43,7 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/TypeBuilder.h"
+#include "llvm/Object/Binary.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/TargetSelect.h"
@@ -1790,8 +1791,12 @@ class DiscoverMachineCodeSize : public llvm::JITEventListener {
   explicit DiscoverMachineCodeSize(Fun* fun) : fun_(fun) {}
   ~DiscoverMachineCodeSize() override {}
 
-  void NotifyObjectEmitted(const llvm::ObjectImage& object) override {
-    for (const llvm::object::SymbolRef& symbol : object.symbols()) {
+  void NotifyObjectEmitted(
+      const llvm::object::ObjectFile& object,
+      const llvm::RuntimeDyld::LoadedObjectInfo& info) override {
+    llvm::object::OwningBinary<llvm::object::ObjectFile> debug =
+        info.getObjectForDebug(object);
+    for (const llvm::object::SymbolRef& symbol : debug.getBinary()->symbols()) {
       llvm::StringRef name;
       symbol.getName(name);
       if (name == "F") {

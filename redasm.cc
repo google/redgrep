@@ -18,7 +18,7 @@
 #include <stdio.h>
 
 #include "llvm-c/Disassembler.h"
-#include "llvm/Config/llvm-config.h"
+#include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
 #include "regexp.h"
 
@@ -46,8 +46,9 @@ int main(int argc, char** argv) {
   llvm::InitializeAllAsmParsers();
   llvm::InitializeAllDisassemblers();
 
+  // EngineBuilder uses getProcessTriple() unless overridden.
   LLVMDisasmContextRef dis = LLVMCreateDisasm(
-      LLVM_DEFAULT_TARGET_TRIPLE, nullptr, 0, nullptr, nullptr);
+      llvm::sys::getProcessTriple().c_str(), nullptr, 0, nullptr, nullptr);
   // These are increased and decreased, respectively, as we iterate.
   uint8_t* addr = reinterpret_cast<uint8_t*>(fun.machine_code_addr_);
   uint64_t size = fun.machine_code_size_;
