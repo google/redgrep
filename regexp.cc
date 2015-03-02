@@ -46,10 +46,11 @@
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "parser.tab.hh"
-#include "utf/utf.h"
+#include "utf.h"
 
 namespace redgrep {
 
@@ -1652,7 +1653,7 @@ class TypeBuilder<bool, false> : public TypeBuilder<types::i<1>, false> {};
 
 namespace redgrep {
 
-typedef bool NativeMatch(const char*, int);
+typedef bool NativeMatch(const char*, size_t);
 
 Fun::Fun() {
   static std::once_flag once_flag;
@@ -1663,8 +1664,9 @@ Fun::Fun() {
   });
   context_.reset(new llvm::LLVMContext);
   module_ = new llvm::Module("M", *context_);
-  engine_.reset(
-      llvm::EngineBuilder(std::unique_ptr<llvm::Module>(module_)).create());
+  engine_.reset(llvm::EngineBuilder(std::unique_ptr<llvm::Module>(module_))
+                    .setMCPU(llvm::sys::getHostCPUName())
+                    .create());
   function_ = llvm::Function::Create(
       llvm::TypeBuilder<NativeMatch, false>::get(*context_),
       llvm::GlobalValue::ExternalLinkage, "F", module_);
@@ -1683,9 +1685,9 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
       llvm::BasicBlock::Create(context, "entry", fun->function_);
   bb.SetInsertPoint(entry);
   llvm::AllocaInst* data = bb.CreateAlloca(
-      llvm::TypeBuilder<const char*, false>::get(context), 0, "data");
+      llvm::TypeBuilder<const char*, false>::get(context), nullptr, "data");
   llvm::AllocaInst* size = bb.CreateAlloca(
-      llvm::TypeBuilder<int, false>::get(context), 0, "size");
+      llvm::TypeBuilder<size_t, false>::get(context), nullptr, "size");
   llvm::Function::arg_iterator arg = fun->function_->arg_begin();
   bb.CreateStore(arg++, data);
   bb.CreateStore(arg++, size);
@@ -1721,8 +1723,8 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
 
     bb.SetInsertPoint(bb1);
     llvm::LoadInst* byte = bb.CreateLoad(bb.CreateLoad(data));
-    bb.CreateStore(bb.CreateGEP(bb.CreateLoad(data), bb.getInt32(1)), data);
-    bb.CreateStore(bb.CreateSub(bb.CreateLoad(size), bb.getInt32(1)), size);
+    bb.CreateStore(bb.CreateGEP(bb.CreateLoad(data), bb.getInt64(1)), data);
+    bb.CreateStore(bb.CreateSub(bb.CreateLoad(size), bb.getInt64(1)), size);
     // Set the "default" transition to ourselves for now. We could look it up,
     // but its BasicBlock might not exist yet, so we will just fix it up later.
     bb.CreateSwitch(byte, bb0);

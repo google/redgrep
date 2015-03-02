@@ -17,9 +17,12 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include <string>
+
 #include "llvm-c/Disassembler.h"
-#include "llvm/Support/Host.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetMachine.h"
 #include "regexp.h"
 
 int main(int argc, char** argv) {
@@ -38,6 +41,10 @@ int main(int argc, char** argv) {
   int nbytes = redgrep::Compile(dfa, &fun);
   printf("; fun is %d bytes\n", nbytes);
 
+  std::string triple = fun.engine_->getTargetMachine()->getTargetTriple();
+  std::string cpu = fun.engine_->getTargetMachine()->getTargetCPU();
+  printf("; target is %s (%s)\n", triple.c_str(), cpu.c_str());
+
   // We need these for the disassembler.
   llvm::InitializeAllTargetInfos();
   llvm::InitializeAllTargets();
@@ -46,9 +53,8 @@ int main(int argc, char** argv) {
   llvm::InitializeAllAsmParsers();
   llvm::InitializeAllDisassemblers();
 
-  // EngineBuilder uses getProcessTriple() unless overridden.
-  LLVMDisasmContextRef dis = LLVMCreateDisasm(
-      llvm::sys::getProcessTriple().c_str(), nullptr, 0, nullptr, nullptr);
+  LLVMDisasmContextRef disasm = LLVMCreateDisasmCPU(
+      triple.c_str(), cpu.c_str(), nullptr, 0, nullptr, nullptr);
   // These are increased and decreased, respectively, as we iterate.
   uint8_t* addr = reinterpret_cast<uint8_t*>(fun.machine_code_addr_);
   uint64_t size = fun.machine_code_size_;
@@ -57,7 +63,7 @@ int main(int argc, char** argv) {
   uint8_t* limit = addr + size;
   while (addr < limit) {
     char buf[128];
-    size_t len = LLVMDisasmInstruction(dis, addr, size, 0, buf, sizeof buf);
+    size_t len = LLVMDisasmInstruction(disasm, addr, size, 0, buf, sizeof buf);
     if (len == 0) {
       errx(1, "bad machine code at %td (%p)", addr - base, addr);
     }
@@ -65,6 +71,6 @@ int main(int argc, char** argv) {
     addr += len;
     size -= len;
   }
-  LLVMDisasmDispose(dis);
+  LLVMDisasmDispose(disasm);
   return 0;
 }

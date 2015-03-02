@@ -13,8 +13,7 @@ easily and guarantees to match them in linear time.
 
 ## Building
 
-You must have Python 2.x, GNU wget, GNU make, GNU bison and either GCC
-or Clang.
+You must have GNU make, GNU bison and either GCC or Clang.
 
 redgrep follows the "latest and greatest" in LLVM
 development, so you should check out the source from

@@ -21,7 +21,7 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "regexp.h"
-#include "utf/utf.h"
+#include "utf.h"
 
 namespace redgrep_yy {
 class location;

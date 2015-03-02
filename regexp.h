@@ -29,7 +29,7 @@
 #include <vector>
 
 #include "llvm/ADT/StringRef.h"
-#include "utf/utf.h"
+#include "utf.h"
 
 namespace llvm {
 class ExecutionEngine;

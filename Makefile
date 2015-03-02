@@ -17,7 +17,7 @@ CC :=		gcc
 CFLAGS :=	-Wall -Wextra -funsigned-char
 CXX :=		g++
 CXXFLAGS :=	$(CFLAGS)
-CPPFLAGS :=	-I.
+CPPFLAGS :=	
 LDFLAGS :=	
 LDLIBS :=	-lpthread -lstdc++
 
@@ -29,19 +29,17 @@ LDLIBS +=	$(shell $(LLVM_CONFIG) --ldflags) \
 		-lLLVM-$(shell $(LLVM_CONFIG) --version)
 
 .PHONY: all
-all: utf gtest regexp_test reddot redasm redgrep
+all: regexp_test reddot redasm redgrep
 
-utf:
-	wget -m -np -q https://go.googlecode.com/hg/src/lib9/utf/
-	ln -s go.googlecode.com/hg/src/lib9/utf/ .
+CPPFLAGS +=	-Ithird_party/libutf/include
+LIBUTF =	third_party/libutf/src/chartorune.o \
+		third_party/libutf/src/runetochar.o \
+		third_party/libutf/src/runelen.o
 
-gtest:
-	wget -m -np -q https://googletest.googlecode.com/svn/trunk/
-	python2 googletest.googlecode.com/svn/trunk/scripts/fuse_gtest_files.py .
-	ln -s ../googletest.googlecode.com/svn/trunk/src/gtest_main.cc gtest/
-
-UTF =	utf/rune.o
-GTEST =	gtest/gtest-all.o gtest/gtest_main.o
+CPPFLAGS +=	-Ithird_party/googletest \
+		-Ithird_party/googletest/include
+GOOGLETEST =	third_party/googletest/src/gtest-all.o \
+		third_party/googletest/src/gtest_main.o
 
 parser.tab.cc: parser.yy
 	$(YACC.y) $<
@@ -49,16 +47,16 @@ parser.tab.cc: parser.yy
 parser.tab.o: parser.tab.cc
 	$(COMPILE.cc) $(OUTPUT_OPTION) $<	-fexceptions
 
-regexp_test: regexp_test.o $(UTF) parser.tab.o regexp.o $(GTEST)
+regexp_test: regexp_test.o $(LIBUTF) parser.tab.o regexp.o $(GOOGLETEST)
 
-reddot: reddot.o $(UTF) parser.tab.o regexp.o
+reddot: reddot.o $(LIBUTF) parser.tab.o regexp.o
 
-redasm: redasm.o $(UTF) parser.tab.o regexp.o
+redasm: redasm.o $(LIBUTF) parser.tab.o regexp.o
 
-redgrep: redgrep_main.o $(UTF) parser.tab.o regexp.o redgrep.o
+redgrep: redgrep_main.o $(LIBUTF) parser.tab.o regexp.o redgrep.o
 
 .PHONY: clean
 clean:
 	$(RM) parser.tab.cc parser.tab.hh location.hh position.hh stack.hh
-	$(RM) *.o utf/*.o gtest/*.o
+	$(RM) *.o $(LIBUTF) $(GOOGLETEST)
 	$(RM) regexp_test reddot redasm redgrep
