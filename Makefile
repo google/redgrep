@@ -14,7 +14,8 @@
 
 YACC :=		bison
 CC :=		gcc
-CFLAGS :=	-Wall -Wextra -funsigned-char
+CFLAGS :=	-funsigned-char -Wall -Wextra \
+		-Wno-unused-parameter
 CXX :=		g++
 CXXFLAGS :=	$(CFLAGS)
 CPPFLAGS :=	
@@ -36,16 +37,17 @@ LIBUTF =	third_party/libutf/src/chartorune.o \
 		third_party/libutf/src/runetochar.o \
 		third_party/libutf/src/runelen.o
 
-CPPFLAGS +=	-Ithird_party/googletest \
-		-Ithird_party/googletest/include
+CPPFLAGS +=	-Ithird_party/googletest/include
 GOOGLETEST =	third_party/googletest/src/gtest-all.o \
 		third_party/googletest/src/gtest_main.o
+
+$(GOOGLETEST): CPPFLAGS +=	-Ithird_party/googletest
+$(GOOGLETEST): CXXFLAGS +=	-Wno-missing-field-initializers
 
 parser.tab.cc: parser.yy
 	$(YACC.y) $<
 
-parser.tab.o: parser.tab.cc
-	$(COMPILE.cc) $(OUTPUT_OPTION) $<	-fexceptions
+parser.tab.o: CXXFLAGS +=	-fexceptions
 
 regexp_test: regexp_test.o $(LIBUTF) parser.tab.o regexp.o $(GOOGLETEST)
 
