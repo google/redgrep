@@ -24,7 +24,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "redgrep.h"
 
-const char kUsage[] =
+static constexpr char kUsage[] =
   "Usage: %s [OPTION]... REGEXP [FILE]...\n"
   "\n"
   "Options:\n"

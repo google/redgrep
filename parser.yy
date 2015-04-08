@@ -158,11 +158,11 @@ static bool Quantifier(Rune character,
                        llvm::StringRef* input,
                        int* min,
                        int* max) {
-  static const char kDigits[] = "0123456789";
+  static constexpr char kDigits[] = "0123456789";
   auto Number = [&input](int* output) -> bool {
     if (input->find_first_of(kDigits) == 0) {
       size_t len = input->find_first_not_of(kDigits);
-      if (len != llvm::StringRef::npos && len <= 3) {
+      if (len != llvm::StringRef::npos && len <= 9) {
         sscanf(input->data(), "%d", output);
         *input = input->drop_front(len);
         return true;

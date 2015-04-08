@@ -929,6 +929,27 @@ TEST(Parse, Disjunction) {
       "a|b|c");
 }
 
+TEST(Parse, CountedRepetition) {
+  Exp exp1;
+  EXPECT_TRUE(Parse("a{0}", &exp1));
+  EXPECT_EQ(EmptyString(), exp1);
+
+  Exp exp2;
+  EXPECT_TRUE(Parse("a{1000}", &exp2));
+  Exp exp3;
+  EXPECT_TRUE(Parse("a{2}{2}{2}{5}{5}{5}", &exp3));
+  // They are structured differently, so compare their normalised forms.
+  EXPECT_EQ(Normalised(exp2), Normalised(exp3));
+
+  Exp exp4;
+  EXPECT_FALSE(Parse("a{1001}", &exp4));
+  EXPECT_FALSE(Parse("a{7}{11}{13}", &exp4));
+
+  Exp exp5;
+  EXPECT_FALSE(Parse("a{999999999}", &exp5));
+  EXPECT_FALSE(Parse("a{10}{10}{10}{10}{10}{10}{10}{10}{10}{10}", &exp5));
+}
+
 #define EXPECT_PARSE_M_C(expected, expected_modes, expected_captures, str)  \
   do {                                                                      \
     Exp exp;                                                                \

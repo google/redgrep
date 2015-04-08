@@ -64,7 +64,7 @@ using std::set;
 using std::tuple;
 using std::vector;
 
-#define TO_INTPTR_T(ptr) reinterpret_cast<intptr_t>(ptr)
+#define CAST_TO_INTPTR_T(ptr) reinterpret_cast<intptr_t>(ptr)
 
 Expression::Expression(Kind kind)
     : kind_(kind),
@@ -73,7 +73,7 @@ Expression::Expression(Kind kind)
 
 Expression::Expression(Kind kind, const tuple<int, Exp, Mode, bool>& group)
     : kind_(kind),
-      data_(TO_INTPTR_T((new tuple<int, Exp, Mode, bool>(group)))),
+      data_(CAST_TO_INTPTR_T((new tuple<int, Exp, Mode, bool>(group)))),
       norm_(false) {}
 
 Expression::Expression(Kind kind, int byte)
@@ -83,22 +83,22 @@ Expression::Expression(Kind kind, int byte)
 
 Expression::Expression(Kind kind, const pair<int, int>& byte_range)
     : kind_(kind),
-      data_(TO_INTPTR_T((new pair<int, int>(byte_range)))),
+      data_(CAST_TO_INTPTR_T((new pair<int, int>(byte_range)))),
       norm_(true) {}
 
 Expression::Expression(Kind kind, const list<Exp>& subexpressions, bool norm)
     : kind_(kind),
-      data_(TO_INTPTR_T((new list<Exp>(subexpressions)))),
+      data_(CAST_TO_INTPTR_T((new list<Exp>(subexpressions)))),
       norm_(norm) {}
 
 Expression::Expression(Kind kind, const pair<set<Rune>, bool>& character_class)
     : kind_(kind),
-      data_(TO_INTPTR_T((new pair<set<Rune>, bool>(character_class)))),
+      data_(CAST_TO_INTPTR_T((new pair<set<Rune>, bool>(character_class)))),
       norm_(false) {}
 
 Expression::Expression(Kind kind, const tuple<Exp, int, int>& quantifier)
     : kind_(kind),
-      data_(TO_INTPTR_T((new tuple<Exp, int, int>(quantifier)))),
+      data_(CAST_TO_INTPTR_T((new tuple<Exp, int, int>(quantifier)))),
       norm_(false) {}
 
 Expression::~Expression() {
@@ -1336,13 +1336,33 @@ class ExpandCharacterClasses : public Walker {
 
 class ExpandQuantifiers : public Walker {
  public:
-  ExpandQuantifiers() {}
+  ExpandQuantifiers(bool* exceeded)
+      : exceeded_(exceeded), stack_({1000}) {}
   ~ExpandQuantifiers() override {}
 
   Exp WalkQuantifier(Exp exp) override {
     Exp sub; int min; int max;
     std::tie(sub, min, max) = exp->quantifier();
+    // Validate the repetition.
+    int limit = stack_.back();
+    int rep = max;
+    if (rep == -1) {
+      rep = min;
+    }
+    if (rep > 0) {
+      limit /= rep;
+    }
+    if (limit == 0) {
+      *exceeded_ = true;
+      return exp;
+    }
+    stack_.push_back(limit);
     sub = Walk(sub);
+    stack_.pop_back();
+    if (*exceeded_) {
+      return exp;
+    }
+    // Perform the repetition.
     Exp tmp;
     if (max == -1) {
       tmp = KleeneClosure(sub);
@@ -1361,6 +1381,9 @@ class ExpandQuantifiers : public Walker {
   }
 
  private:
+  bool* exceeded_;
+  vector<int> stack_;
+
   //DISALLOW_COPY_AND_ASSIGN(ExpandQuantifiers);
   ExpandQuantifiers(const ExpandQuantifiers&) = delete;
   void operator=(const ExpandQuantifiers&) = delete;
@@ -1373,8 +1396,9 @@ bool Parse(llvm::StringRef str, Exp* exp) {
     *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
     *exp = StripGroups().Walk(*exp);
     *exp = ExpandCharacterClasses().Walk(*exp);
-    *exp = ExpandQuantifiers().Walk(*exp);
-    return true;
+    bool exceeded = false;
+    *exp = ExpandQuantifiers(&exceeded).Walk(*exp);
+    return !exceeded;
   }
   return false;
 }
@@ -1388,8 +1412,9 @@ bool Parse(llvm::StringRef str, Exp* exp,
     *exp = ApplyGroups().Walk(*exp);
     *exp = NumberGroups(modes, captures).Walk(*exp);
     *exp = ExpandCharacterClasses().Walk(*exp);
-    *exp = ExpandQuantifiers().Walk(*exp);
-    return true;
+    bool exceeded = false;
+    *exp = ExpandQuantifiers(&exceeded).Walk(*exp);
+    return !exceeded;
   }
   return false;
 }
