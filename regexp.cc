@@ -45,7 +45,10 @@
 #include "llvm/IR/TypeBuilder.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/ObjectFile.h"
+#include "llvm/Object/SymbolSize.h"
+#include "llvm/Object/SymbolicFile.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
@@ -1714,8 +1717,8 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
   llvm::AllocaInst* size = bb.CreateAlloca(
       llvm::TypeBuilder<size_t, false>::get(context), nullptr, "size");
   llvm::Function::arg_iterator arg = fun->function_->arg_begin();
-  bb.CreateStore(arg++, data);
-  bb.CreateStore(arg++, size);
+  bb.CreateStore(&*arg++, data);
+  bb.CreateStore(&*arg++, size);
 
   // Create a BasicBlock that returns true.
   llvm::BasicBlock* return_true =
@@ -1821,14 +1824,17 @@ class DiscoverMachineCodeSize : public llvm::JITEventListener {
   void NotifyObjectEmitted(
       const llvm::object::ObjectFile& object,
       const llvm::RuntimeDyld::LoadedObjectInfo& info) override {
+    // We need this in order to obtain the addresses as well as the sizes.
     llvm::object::OwningBinary<llvm::object::ObjectFile> debug =
         info.getObjectForDebug(object);
-    for (const llvm::object::SymbolRef& symbol : debug.getBinary()->symbols()) {
-      llvm::StringRef name;
-      symbol.getName(name);
-      if (name == "F") {
-        symbol.getAddress(fun_->machine_code_addr_);
-        symbol.getSize(fun_->machine_code_size_);
+    vector<pair<llvm::object::SymbolRef, uint64_t>> symbol_sizes =
+        llvm::object::computeSymbolSizes(*debug.getBinary());
+    for (const auto& i : symbol_sizes) {
+      llvm::ErrorOr<llvm::StringRef> name = i.first.getName();
+      llvm::ErrorOr<uint64_t> addr = i.first.getAddress();
+      if (name && addr && *name == "F") {
+        fun_->machine_code_addr_ = *addr;
+        fun_->machine_code_size_ = i.second;
         return;
       }
     }
