@@ -37,11 +37,11 @@ LIBUTF =	third_party/libutf/src/chartorune.o \
 		third_party/libutf/src/runetochar.o \
 		third_party/libutf/src/runelen.o
 
-CPPFLAGS +=	-Ithird_party/googletest/include
-GOOGLETEST =	third_party/googletest/src/gtest-all.o \
-		third_party/googletest/src/gtest_main.o
+CPPFLAGS +=	-Ithird_party/googletest/googletest/include
+GOOGLETEST =	third_party/googletest/googletest/src/gtest-all.o \
+		third_party/googletest/googletest/src/gtest_main.o
 
-$(GOOGLETEST): CPPFLAGS +=	-Ithird_party/googletest
+$(GOOGLETEST): CPPFLAGS +=	-Ithird_party/googletest/googletest
 $(GOOGLETEST): CXXFLAGS +=	-Wno-missing-field-initializers
 
 parser.tab.cc: parser.yy
