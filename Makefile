@@ -33,9 +33,10 @@ LDLIBS +=	$(shell $(LLVM_CONFIG) --ldflags) \
 all: regexp_test reddot redasm redgrep
 
 CPPFLAGS +=	-Ithird_party/libutf/include
-LIBUTF =	third_party/libutf/src/chartorune.o \
-		third_party/libutf/src/runetochar.o \
-		third_party/libutf/src/runelen.o
+LIBUTF =	third_party/libutf/runetype/isvalidrune.o \
+		third_party/libutf/utf/chartorune.o \
+		third_party/libutf/utf/runetochar.o \
+		third_party/libutf/utf/runelen.o
 
 CPPFLAGS +=	-Ithird_party/googletest/googletest/include
 GOOGLETEST =	third_party/googletest/googletest/src/gtest-all.o \
