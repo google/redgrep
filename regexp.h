@@ -40,17 +40,6 @@ class Module;
 
 namespace redgrep {
 
-using std::bitset;
-using std::list;
-using std::make_pair;
-using std::make_tuple;
-using std::map;
-using std::multimap;
-using std::pair;
-using std::set;
-using std::tuple;
-using std::vector;
-
 // Implements regular expressions using Brzozowski derivatives, Antimirov
 // partial derivatives, Sulzmann submatches and Laurikari tagged transitions.
 //
@@ -118,12 +107,12 @@ typedef std::shared_ptr<Expression> Exp;
 class Expression {
  public:
   explicit Expression(Kind kind);
-  Expression(Kind kind, const tuple<int, Exp, Mode, bool>& group);
+  Expression(Kind kind, const std::tuple<int, Exp, Mode, bool>& group);
   Expression(Kind kind, int byte);
-  Expression(Kind kind, const pair<int, int>& byte_range);
-  Expression(Kind kind, const list<Exp>& subexpressions, bool norm);
-  Expression(Kind kind, const pair<set<Rune>, bool>& character_class);
-  Expression(Kind kind, const tuple<Exp, int, int>& quantifier);
+  Expression(Kind kind, const std::pair<int, int>& byte_range);
+  Expression(Kind kind, const std::list<Exp>& subexpressions, bool norm);
+  Expression(Kind kind, const std::pair<std::set<Rune>, bool>& character_class);
+  Expression(Kind kind, const std::tuple<Exp, int, int>& quantifier);
   ~Expression();
 
   Kind kind() const { return kind_; }
@@ -132,12 +121,12 @@ class Expression {
 
   // Accessors for the expression data. Of course, if you call the wrong
   // function for the expression kind, you're gonna have a bad time.
-  const tuple<int, Exp, Mode, bool>& group() const;
+  const std::tuple<int, Exp, Mode, bool>& group() const;
   int byte() const;
-  const pair<int, int>& byte_range() const;
-  const list<Exp>& subexpressions() const;
-  const pair<set<Rune>, bool>& character_class() const;
-  const tuple<Exp, int, int>& quantifier() const;
+  const std::pair<int, int>& byte_range() const;
+  const std::list<Exp>& subexpressions() const;
+  const std::pair<std::set<Rune>, bool>& character_class() const;
+  const std::tuple<Exp, int, int>& quantifier() const;
 
   // A KleeneClosure or Complement expression has one subexpression.
   // Use sub() for convenience.
@@ -154,9 +143,8 @@ class Expression {
   const intptr_t data_;
   const bool norm_;
 
-  //DISALLOW_COPY_AND_ASSIGN(Expression);
   Expression(const Expression&) = delete;
-  void operator=(const Expression&) = delete;
+  Expression& operator=(const Expression&) = delete;
 };
 
 // Returns -1, 0 or +1 when x is less than, equal to or greater than y,
@@ -197,24 +185,24 @@ namespace redgrep {
 
 Exp EmptySet();
 Exp EmptyString();
-Exp Group(const tuple<int, Exp, Mode, bool>& group);
+Exp Group(const std::tuple<int, Exp, Mode, bool>& group);
 Exp AnyByte();
 Exp Byte(int byte);
-Exp ByteRange(const pair<int, int>& byte_range);
-Exp KleeneClosure(const list<Exp>& subexpressions, bool norm);
-Exp Concatenation(const list<Exp>& subexpressions, bool norm);
-Exp Complement(const list<Exp>& subexpressions, bool norm);
-Exp Conjunction(const list<Exp>& subexpressions, bool norm);
-Exp Disjunction(const list<Exp>& subexpressions, bool norm);
-Exp CharacterClass(const pair<set<Rune>, bool>& character_class);
-Exp Quantifier(const tuple<Exp, int, int>& quantifier);
+Exp ByteRange(const std::pair<int, int>& byte_range);
+Exp KleeneClosure(const std::list<Exp>& subexpressions, bool norm);
+Exp Concatenation(const std::list<Exp>& subexpressions, bool norm);
+Exp Complement(const std::list<Exp>& subexpressions, bool norm);
+Exp Conjunction(const std::list<Exp>& subexpressions, bool norm);
+Exp Disjunction(const std::list<Exp>& subexpressions, bool norm);
+Exp CharacterClass(const std::pair<std::set<Rune>, bool>& character_class);
+Exp Quantifier(const std::tuple<Exp, int, int>& quantifier);
 
 inline Exp Group(int num, Exp sub, Mode mode, bool capture) {
-  return Group(make_tuple(num, sub, mode, capture));
+  return Group(std::make_tuple(num, sub, mode, capture));
 }
 
 inline Exp ByteRange(int min, int max) {
-  return ByteRange(make_pair(min, max));
+  return ByteRange(std::make_pair(min, max));
 }
 
 inline Exp KleeneClosure(Exp x) {
@@ -244,12 +232,12 @@ inline Exp Disjunction(Exp x, Exp y, Variadic... z) {
   return Disjunction({x, y, z...}, false);
 }
 
-inline Exp CharacterClass(const set<Rune>& characters, bool complement) {
-  return CharacterClass(make_pair(characters, complement));
+inline Exp CharacterClass(const std::set<Rune>& characters, bool complement) {
+  return CharacterClass(std::make_pair(characters, complement));
 }
 
 inline Exp Quantifier(Exp sub, int min, int max) {
-  return Quantifier(make_tuple(sub, min, max));
+  return Quantifier(std::make_tuple(sub, min, max));
 }
 
 Exp AnyCharacter();
@@ -271,12 +259,12 @@ enum BindingType {
   kAppend,
 };
 
-typedef list<pair<int, BindingType>> Bindings;
+typedef std::list<std::pair<int, BindingType>> Bindings;
 
 // Conceptually, an OuterSet is a Disjunction and an InnerSet is a Conjunction.
 // For simplicity, we don't introduce a new type for the latter, but the former
 // needs to associate each InnerSet with its Bindings.
-typedef list<pair<Exp, Bindings>> OuterSet;
+typedef std::list<std::pair<Exp, Bindings>> OuterSet;
 typedef std::unique_ptr<OuterSet> Outer;
 
 // Returns the denormalised form of exp.
@@ -293,7 +281,7 @@ Outer Partial(Exp exp, int byte);
 
 // Outputs the partitions computed for exp.
 // The first partition should be Σ-based. Any others should be ∅-based.
-void Partitions(Exp exp, list<bitset<256>>* partitions);
+void Partitions(Exp exp, std::list<std::bitset<256>>* partitions);
 
 // Outputs the expression parsed from str.
 // Returns true on success, false on failure.
@@ -303,7 +291,7 @@ bool Parse(llvm::StringRef str, Exp* exp);
 // which Groups capture.
 // Returns true on success, false on failure.
 bool Parse(llvm::StringRef str, Exp* exp,
-           vector<Mode>* modes, vector<int>* captures);
+           std::vector<Mode>* modes, std::vector<int>* captures);
 
 // Returns the result of matching str using exp.
 bool Match(Exp exp, llvm::StringRef str);
@@ -328,13 +316,12 @@ class FA {
 
   int error_;
   int empty_;
-  map<int, bool> accepting_;
-  map<int, list<bitset<256>>> partitions_;
+  std::map<int, bool> accepting_;
+  std::map<int, std::list<std::bitset<256>>> partitions_;
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(FA);
   FA(const FA&) = delete;
-  void operator=(const FA&) = delete;
+  FA& operator=(const FA&) = delete;
 };
 
 // Represents a deterministic finite automaton.
@@ -343,12 +330,11 @@ class DFA : public FA {
   DFA() {}
   ~DFA() override {}
 
-  map<pair<int, int>, int> transition_;
+  std::map<std::pair<int, int>, int> transition_;
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(DFA);
   DFA(const DFA&) = delete;
-  void operator=(const DFA&) = delete;
+  DFA& operator=(const DFA&) = delete;
 };
 
 // Represents a tagged nondeterministic finite automaton.
@@ -357,16 +343,15 @@ class TNFA : public FA {
   TNFA() {}
   ~TNFA() override {}
 
-  vector<Mode> modes_;
-  vector<int> captures_;
+  std::vector<Mode> modes_;
+  std::vector<int> captures_;
 
-  multimap<pair<int, int>, pair<int, Bindings>> transition_;
-  map<int, Bindings> final_;
+  std::multimap<std::pair<int, int>, std::pair<int, Bindings>> transition_;
+  std::map<int, Bindings> final_;
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(TNFA);
   TNFA(const TNFA&) = delete;
-  void operator=(const TNFA&) = delete;
+  TNFA& operator=(const TNFA&) = delete;
 };
 
 // Outputs the DFA compiled from exp.
@@ -384,7 +369,7 @@ bool Match(const DFA& dfa, llvm::StringRef str);
 // Outputs the offsets of the beginning and ending of each Group that captures.
 // Thus, the nth Group begins at offsets[2*n+0] and ends at offsets[2*n+1].
 bool Match(const TNFA& tnfa, llvm::StringRef str,
-           vector<int>* offsets);
+           std::vector<int>* offsets);
 
 // Represents a function and its machine code.
 struct Fun {

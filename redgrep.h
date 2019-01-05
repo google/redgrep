@@ -36,9 +36,8 @@ class RED {
   bool ok_;
   redgrep::Fun fun_;
 
-  //DISALLOW_COPY_AND_ASSIGN(RED);
   RED(const RED&) = delete;
-  void operator=(const RED&) = delete;
+  RED& operator=(const RED&) = delete;
 };
 
 #endif  // REDGREP_REDGREP_H_

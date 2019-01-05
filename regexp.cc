@@ -57,16 +57,6 @@
 
 namespace redgrep {
 
-using std::bitset;
-using std::list;
-using std::make_pair;
-using std::make_tuple;
-using std::map;
-using std::pair;
-using std::set;
-using std::tuple;
-using std::vector;
-
 #define CAST_TO_INTPTR_T(ptr) reinterpret_cast<intptr_t>(ptr)
 
 Expression::Expression(Kind kind)
@@ -74,9 +64,9 @@ Expression::Expression(Kind kind)
       data_(0),
       norm_(true) {}
 
-Expression::Expression(Kind kind, const tuple<int, Exp, Mode, bool>& group)
+Expression::Expression(Kind kind, const std::tuple<int, Exp, Mode, bool>& group)
     : kind_(kind),
-      data_(CAST_TO_INTPTR_T((new tuple<int, Exp, Mode, bool>(group)))),
+      data_(CAST_TO_INTPTR_T((new std::tuple<int, Exp, Mode, bool>(group)))),
       norm_(false) {}
 
 Expression::Expression(Kind kind, int byte)
@@ -84,24 +74,24 @@ Expression::Expression(Kind kind, int byte)
       data_(byte),
       norm_(true) {}
 
-Expression::Expression(Kind kind, const pair<int, int>& byte_range)
+Expression::Expression(Kind kind, const std::pair<int, int>& byte_range)
     : kind_(kind),
-      data_(CAST_TO_INTPTR_T((new pair<int, int>(byte_range)))),
+      data_(CAST_TO_INTPTR_T((new std::pair<int, int>(byte_range)))),
       norm_(true) {}
 
-Expression::Expression(Kind kind, const list<Exp>& subexpressions, bool norm)
+Expression::Expression(Kind kind, const std::list<Exp>& subexpressions, bool norm)
     : kind_(kind),
-      data_(CAST_TO_INTPTR_T((new list<Exp>(subexpressions)))),
+      data_(CAST_TO_INTPTR_T((new std::list<Exp>(subexpressions)))),
       norm_(norm) {}
 
-Expression::Expression(Kind kind, const pair<set<Rune>, bool>& character_class)
+Expression::Expression(Kind kind, const std::pair<std::set<Rune>, bool>& character_class)
     : kind_(kind),
-      data_(CAST_TO_INTPTR_T((new pair<set<Rune>, bool>(character_class)))),
+      data_(CAST_TO_INTPTR_T((new std::pair<std::set<Rune>, bool>(character_class)))),
       norm_(false) {}
 
-Expression::Expression(Kind kind, const tuple<Exp, int, int>& quantifier)
+Expression::Expression(Kind kind, const std::tuple<Exp, int, int>& quantifier)
     : kind_(kind),
-      data_(CAST_TO_INTPTR_T((new tuple<Exp, int, int>(quantifier)))),
+      data_(CAST_TO_INTPTR_T((new std::tuple<Exp, int, int>(quantifier)))),
       norm_(false) {}
 
 Expression::~Expression() {
@@ -111,7 +101,7 @@ Expression::~Expression() {
       break;
 
     case kGroup:
-      delete reinterpret_cast<tuple<int, Exp, Mode, bool>*>(data());
+      delete reinterpret_cast<std::tuple<int, Exp, Mode, bool>*>(data());
       break;
 
     case kAnyByte:
@@ -121,7 +111,7 @@ Expression::~Expression() {
       break;
 
     case kByteRange:
-      delete reinterpret_cast<pair<int, int>*>(data());
+      delete reinterpret_cast<std::pair<int, int>*>(data());
       break;
 
     case kKleeneClosure:
@@ -129,41 +119,41 @@ Expression::~Expression() {
     case kComplement:
     case kConjunction:
     case kDisjunction:
-      delete reinterpret_cast<list<Exp>*>(data());
+      delete reinterpret_cast<std::list<Exp>*>(data());
       break;
 
     case kCharacterClass:
-      delete reinterpret_cast<pair<set<Rune>, bool>*>(data());
+      delete reinterpret_cast<std::pair<std::set<Rune>, bool>*>(data());
       break;
 
     case kQuantifier:
-      delete reinterpret_cast<tuple<Exp, int, int>*>(data());
+      delete reinterpret_cast<std::tuple<Exp, int, int>*>(data());
       break;
   }
 }
 
-const tuple<int, Exp, Mode, bool>& Expression::group() const {
-  return *reinterpret_cast<tuple<int, Exp, Mode, bool>*>(data());
+const std::tuple<int, Exp, Mode, bool>& Expression::group() const {
+  return *reinterpret_cast<std::tuple<int, Exp, Mode, bool>*>(data());
 }
 
 int Expression::byte() const {
   return data();
 }
 
-const pair<int, int>& Expression::byte_range() const {
-  return *reinterpret_cast<pair<int, int>*>(data());
+const std::pair<int, int>& Expression::byte_range() const {
+  return *reinterpret_cast<std::pair<int, int>*>(data());
 }
 
-const list<Exp>& Expression::subexpressions() const {
-  return *reinterpret_cast<list<Exp>*>(data());
+const std::list<Exp>& Expression::subexpressions() const {
+  return *reinterpret_cast<std::list<Exp>*>(data());
 }
 
-const pair<set<Rune>, bool>& Expression::character_class() const {
-  return *reinterpret_cast<pair<set<Rune>, bool>*>(data());
+const std::pair<std::set<Rune>, bool>& Expression::character_class() const {
+  return *reinterpret_cast<std::pair<std::set<Rune>, bool>*>(data());
 }
 
-const tuple<Exp, int, int>& Expression::quantifier() const {
-  return *reinterpret_cast<tuple<Exp, int, int>*>(data());
+const std::tuple<Exp, int, int>& Expression::quantifier() const {
+  return *reinterpret_cast<std::tuple<Exp, int, int>*>(data());
 }
 
 int Compare(Exp x, Exp y) {
@@ -214,8 +204,8 @@ int Compare(Exp x, Exp y) {
     case kConjunction:
     case kDisjunction: {
       // Perform a lexicographical compare.
-      list<Exp>::const_iterator xi = x->subexpressions().begin();
-      list<Exp>::const_iterator yi = y->subexpressions().begin();
+      std::list<Exp>::const_iterator xi = x->subexpressions().begin();
+      std::list<Exp>::const_iterator yi = y->subexpressions().begin();
       while (xi != x->subexpressions().end() &&
              yi != y->subexpressions().end()) {
         int compare = Compare(*xi, *yi);
@@ -253,7 +243,7 @@ Exp EmptyString() {
   return exp;
 }
 
-Exp Group(const tuple<int, Exp, Mode, bool>& group) {
+Exp Group(const std::tuple<int, Exp, Mode, bool>& group) {
   Exp exp(new Expression(kGroup, group));
   return exp;
 }
@@ -268,42 +258,42 @@ Exp Byte(int byte) {
   return exp;
 }
 
-Exp ByteRange(const pair<int, int>& byte_range) {
+Exp ByteRange(const std::pair<int, int>& byte_range) {
   Exp exp(new Expression(kByteRange, byte_range));
   return exp;
 }
 
-Exp KleeneClosure(const list<Exp>& subexpressions, bool norm) {
+Exp KleeneClosure(const std::list<Exp>& subexpressions, bool norm) {
   Exp exp(new Expression(kKleeneClosure, subexpressions, norm));
   return exp;
 }
 
-Exp Concatenation(const list<Exp>& subexpressions, bool norm) {
+Exp Concatenation(const std::list<Exp>& subexpressions, bool norm) {
   Exp exp(new Expression(kConcatenation, subexpressions, norm));
   return exp;
 }
 
-Exp Complement(const list<Exp>& subexpressions, bool norm) {
+Exp Complement(const std::list<Exp>& subexpressions, bool norm) {
   Exp exp(new Expression(kComplement, subexpressions, norm));
   return exp;
 }
 
-Exp Conjunction(const list<Exp>& subexpressions, bool norm) {
+Exp Conjunction(const std::list<Exp>& subexpressions, bool norm) {
   Exp exp(new Expression(kConjunction, subexpressions, norm));
   return exp;
 }
 
-Exp Disjunction(const list<Exp>& subexpressions, bool norm) {
+Exp Disjunction(const std::list<Exp>& subexpressions, bool norm) {
   Exp exp(new Expression(kDisjunction, subexpressions, norm));
   return exp;
 }
 
-Exp CharacterClass(const pair<set<Rune>, bool>& character_class) {
+Exp CharacterClass(const std::pair<std::set<Rune>, bool>& character_class) {
   Exp exp(new Expression(kCharacterClass, character_class));
   return exp;
 }
 
-Exp Quantifier(const tuple<Exp, int, int>& quantifier) {
+Exp Quantifier(const std::tuple<Exp, int, int>& quantifier) {
   Exp exp(new Expression(kQuantifier, quantifier));
   return exp;
 }
@@ -437,7 +427,7 @@ Exp Normalised(Exp exp) {
     }
 
     case kConjunction: {
-      list<Exp> subs;
+      std::list<Exp> subs;
       for (Exp sub : exp->subexpressions()) {
         sub = Normalised(sub);
         // ∅ & r ≈ ∅
@@ -447,7 +437,7 @@ Exp Normalised(Exp exp) {
         }
         // (r & s) & t ≈ r & (s & t)
         if (sub->kind() == kConjunction) {
-          list<Exp> copy = sub->subexpressions();
+          std::list<Exp> copy = sub->subexpressions();
           subs.splice(subs.end(), copy);
         } else {
           subs.push_back(sub);
@@ -471,7 +461,7 @@ Exp Normalised(Exp exp) {
     }
 
     case kDisjunction: {
-      list<Exp> subs;
+      std::list<Exp> subs;
       for (Exp sub : exp->subexpressions()) {
         sub = Normalised(sub);
         // ¬∅ + r ≈ ¬∅
@@ -482,7 +472,7 @@ Exp Normalised(Exp exp) {
         }
         // (r + s) + t ≈ r + (s + t)
         if (sub->kind() == kDisjunction) {
-          list<Exp> copy = sub->subexpressions();
+          std::list<Exp> copy = sub->subexpressions();
           subs.splice(subs.end(), copy);
         } else {
           subs.push_back(sub);
@@ -633,7 +623,7 @@ Exp Derivative(Exp exp, int byte) {
 
     case kConjunction: {
       // ∂a(r & s) = ∂ar & ∂as
-      list<Exp> subs;
+      std::list<Exp> subs;
       for (Exp sub : exp->subexpressions()) {
         sub = Derivative(sub, byte);
         subs.push_back(sub);
@@ -643,7 +633,7 @@ Exp Derivative(Exp exp, int byte) {
 
     case kDisjunction: {
       // ∂a(r + s) = ∂ar + ∂as
-      list<Exp> subs;
+      std::list<Exp> subs;
       for (Exp sub : exp->subexpressions()) {
         sub = Derivative(sub, byte);
         subs.push_back(sub);
@@ -668,7 +658,7 @@ Outer Denormalised(Exp exp) {
     if (sub->kind() != kConjunction) {
       sub = Conjunction({sub}, false);
     }
-    outer->push_back(make_pair(sub, Bindings({})));
+    outer->push_back(std::make_pair(sub, Bindings({})));
   }
   return outer;
 }
@@ -676,7 +666,7 @@ Outer Denormalised(Exp exp) {
 Outer PartialConcatenation(Outer x, Exp y, const Bindings& initial) {
   // We mutate x as an optimisation.
   for (auto& xi : *x) {
-    list<Exp> subs;
+    std::list<Exp> subs;
     for (Exp sub : xi.first->subexpressions()) {
       sub = Concatenation(sub, y);
       subs.push_back(sub);
@@ -694,7 +684,7 @@ Outer PartialComplement(Outer x) {
     for (Exp sub : xi.first->subexpressions()) {
       sub = Complement(sub);
       sub = Conjunction({sub}, false);
-      tmp->push_back(make_pair(sub, Bindings({})));
+      tmp->push_back(std::make_pair(sub, Bindings({})));
     }
     if (outer == nullptr) {
       outer = std::move(tmp);
@@ -713,7 +703,7 @@ Outer PartialConjunction(Outer x, Outer y) {
       Bindings bindings;
       bindings.insert(bindings.end(), xi.second.begin(), xi.second.end());
       bindings.insert(bindings.end(), yi.second.begin(), yi.second.end());
-      outer->push_back(make_pair(sub, bindings));
+      outer->push_back(std::make_pair(sub, bindings));
     }
   }
   return outer;
@@ -735,7 +725,7 @@ static void CancelBindings(Exp exp, Bindings* bindings) {
     case kGroup: {
       int num; Exp sub;
       std::tie(num, sub, std::ignore, std::ignore) = exp->group();
-      bindings->push_back(make_pair(num, kCancel));
+      bindings->push_back(std::make_pair(num, kCancel));
       CancelBindings(sub, bindings);
       return;
     }
@@ -781,7 +771,7 @@ static void EpsilonBindings(Exp exp, Bindings* bindings) {
     case kGroup: {
       int num; Exp sub;
       std::tie(num, sub, std::ignore, std::ignore) = exp->group();
-      bindings->push_back(make_pair(num, kEpsilon));
+      bindings->push_back(std::make_pair(num, kEpsilon));
       EpsilonBindings(sub, bindings);
       return;
     }
@@ -844,7 +834,7 @@ Outer Partial(Exp exp, int byte) {
       for (auto& i : *outer) {
         i.first = Group(num, i.first, mode, capture);
         i.first = Conjunction({i.first}, false);
-        i.second.push_back(make_pair(num, kAppend));
+        i.second.push_back(std::make_pair(num, kAppend));
       }
       return outer;
     }
@@ -940,16 +930,16 @@ Outer Partial(Exp exp, int byte) {
 
 // Outputs the partitions obtained by intersecting the partitions in x and y.
 // The first partition should be Σ-based. Any others should be ∅-based.
-static void Intersection(const list<bitset<256>>& x,
-                         const list<bitset<256>>& y,
-                         list<bitset<256>>* z) {
-  for (list<bitset<256>>::const_iterator xi = x.begin();
+static void Intersection(const std::list<std::bitset<256>>& x,
+                         const std::list<std::bitset<256>>& y,
+                         std::list<std::bitset<256>>* z) {
+  for (std::list<std::bitset<256>>::const_iterator xi = x.begin();
        xi != x.end();
        ++xi) {
-    for (list<bitset<256>>::const_iterator yi = y.begin();
+    for (std::list<std::bitset<256>>::const_iterator yi = y.begin();
          yi != y.end();
          ++yi) {
-      bitset<256> bs;
+      std::bitset<256> bs;
       if (xi == x.begin()) {
         if (yi == y.begin()) {
           // Perform set union: *xi is Σ-based, *yi is Σ-based.
@@ -982,7 +972,7 @@ static void Intersection(const list<bitset<256>>& x,
   }
 }
 
-void Partitions(Exp exp, list<bitset<256>>* partitions) {
+void Partitions(Exp exp, std::list<std::bitset<256>>* partitions) {
   switch (exp->kind()) {
     case kEmptySet:
       // C(∅) = {Σ}
@@ -1005,7 +995,7 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
 
     case kByte: {
       // C(a) = {Σ \ a, a}
-      bitset<256> bs;
+      std::bitset<256> bs;
       bs.set(exp->byte());
       partitions->push_back(bs);
       partitions->push_back(bs);
@@ -1014,7 +1004,7 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
 
     case kByteRange: {
       // C(S) = {Σ \ S, S}
-      bitset<256> bs;
+      std::bitset<256> bs;
       for (int i = exp->byte_range().first;
            i <= exp->byte_range().second;
            ++i) {
@@ -1034,7 +1024,7 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
       // C(r · s) = C(r) ∧ C(s) if ν(r) = ε
       //            C(r)        if ν(r) = ∅
       if (IsNullable(exp->head())) {
-        list<bitset<256>> x, y;
+        std::list<std::bitset<256>> x, y;
         Partitions(exp->head(), &x);
         Partitions(exp->tail(), &y);
         Intersection(x, y, partitions);
@@ -1055,7 +1045,7 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
         if (partitions->empty()) {
           Partitions(sub, partitions);
         } else {
-          list<bitset<256>> x, y;
+          std::list<std::bitset<256>> x, y;
           partitions->swap(x);
           Partitions(sub, &y);
           Intersection(x, y, partitions);
@@ -1069,7 +1059,7 @@ void Partitions(Exp exp, list<bitset<256>>* partitions) {
         if (partitions->empty()) {
           Partitions(sub, partitions);
         } else {
-          list<bitset<256>> x, y;
+          std::list<std::bitset<256>> x, y;
           partitions->swap(x);
           Partitions(sub, &y);
           Intersection(x, y, partitions);
@@ -1114,7 +1104,7 @@ class Walker {
   }
 
   virtual Exp WalkConjunction(Exp exp) {
-    list<Exp> subs;
+    std::list<Exp> subs;
     for (Exp sub : exp->subexpressions()) {
       sub = Walk(sub);
       subs.push_back(sub);
@@ -1123,7 +1113,7 @@ class Walker {
   }
 
   virtual Exp WalkDisjunction(Exp exp) {
-    list<Exp> subs;
+    std::list<Exp> subs;
     for (Exp sub : exp->subexpressions()) {
       sub = Walk(sub);
       subs.push_back(sub);
@@ -1181,9 +1171,8 @@ class Walker {
   }
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(Walker);
   Walker(const Walker&) = delete;
-  void operator=(const Walker&) = delete;
+  Walker& operator=(const Walker&) = delete;
 };
 
 class FlattenConjunctionsAndDisjunctions : public Walker {
@@ -1191,7 +1180,7 @@ class FlattenConjunctionsAndDisjunctions : public Walker {
   FlattenConjunctionsAndDisjunctions() {}
   ~FlattenConjunctionsAndDisjunctions() override {}
 
-  inline void FlattenImpl(Exp exp, list<Exp>* subs) {
+  inline void FlattenImpl(Exp exp, std::list<Exp>* subs) {
     Kind kind = exp->kind();
     // In most cases, exp is a left-skewed binary tree.
     while (exp->kind() == kind &&
@@ -1200,17 +1189,17 @@ class FlattenConjunctionsAndDisjunctions : public Walker {
       exp = exp->head();
     }
     if (exp->kind() == kind) {
-      list<Exp> copy = exp->subexpressions();
+      std::list<Exp> copy = exp->subexpressions();
       subs->splice(subs->begin(), copy);
     } else {
       subs->push_front(exp);
     }
-    list<Exp>::iterator i = subs->begin();
+    std::list<Exp>::iterator i = subs->begin();
     while (i != subs->end()) {
       Exp sub = *i;
       sub = Walk(sub);
       if (sub->kind() == kind) {
-        list<Exp> copy = sub->subexpressions();
+        std::list<Exp> copy = sub->subexpressions();
         subs->splice(i, copy);
         i = subs->erase(i);
       } else {
@@ -1221,21 +1210,20 @@ class FlattenConjunctionsAndDisjunctions : public Walker {
   }
 
   Exp WalkConjunction(Exp exp) override {
-    list<Exp> subs;
+    std::list<Exp> subs;
     FlattenImpl(exp, &subs);
     return Conjunction(subs, false);
   }
 
   Exp WalkDisjunction(Exp exp) override {
-    list<Exp> subs;
+    std::list<Exp> subs;
     FlattenImpl(exp, &subs);
     return Disjunction(subs, false);
   }
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(FlattenConjunctionsAndDisjunctions);
   FlattenConjunctionsAndDisjunctions(const FlattenConjunctionsAndDisjunctions&) = delete;
-  void operator=(const FlattenConjunctionsAndDisjunctions&) = delete;
+  FlattenConjunctionsAndDisjunctions& operator=(const FlattenConjunctionsAndDisjunctions&) = delete;
 };
 
 class StripGroups : public Walker {
@@ -1249,9 +1237,8 @@ class StripGroups : public Walker {
   }
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(StripGroups);
   StripGroups(const StripGroups&) = delete;
-  void operator=(const StripGroups&) = delete;
+  StripGroups& operator=(const StripGroups&) = delete;
 };
 
 class ApplyGroups : public Walker {
@@ -1271,7 +1258,7 @@ class ApplyGroups : public Walker {
       return exp;
     }
     // Applying Groups to the subexpressions will identify the leftmost.
-    list<Exp> subs;
+    std::list<Exp> subs;
     for (Exp sub : exp->subexpressions()) {
       sub = Walk(sub);
       sub = Group(-1, sub, kPassive, false);
@@ -1281,14 +1268,13 @@ class ApplyGroups : public Walker {
   }
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(ApplyGroups);
   ApplyGroups(const ApplyGroups&) = delete;
-  void operator=(const ApplyGroups&) = delete;
+  ApplyGroups& operator=(const ApplyGroups&) = delete;
 };
 
 class NumberGroups : public Walker {
  public:
-  NumberGroups(vector<Mode>* modes, vector<int>* captures)
+  NumberGroups(std::vector<Mode>* modes, std::vector<int>* captures)
       : num_(0), modes_(modes), captures_(captures) {}
   ~NumberGroups() override {}
 
@@ -1306,12 +1292,11 @@ class NumberGroups : public Walker {
 
  private:
   int num_;
-  vector<Mode>* modes_;
-  vector<int>* captures_;
+  std::vector<Mode>* modes_;
+  std::vector<int>* captures_;
 
-  //DISALLOW_COPY_AND_ASSIGN(NumberGroups);
   NumberGroups(const NumberGroups&) = delete;
-  void operator=(const NumberGroups&) = delete;
+  NumberGroups& operator=(const NumberGroups&) = delete;
 };
 
 class ExpandCharacterClasses : public Walker {
@@ -1320,7 +1305,7 @@ class ExpandCharacterClasses : public Walker {
   ~ExpandCharacterClasses() override {}
 
   Exp WalkCharacterClass(Exp exp) override {
-    list<Exp> subs;
+    std::list<Exp> subs;
     for (Rune character : exp->character_class().first) {
       subs.push_back(Character(character));
     }
@@ -1332,9 +1317,8 @@ class ExpandCharacterClasses : public Walker {
   }
 
  private:
-  //DISALLOW_COPY_AND_ASSIGN(ExpandCharacterClasses);
   ExpandCharacterClasses(const ExpandCharacterClasses&) = delete;
-  void operator=(const ExpandCharacterClasses&) = delete;
+  ExpandCharacterClasses& operator=(const ExpandCharacterClasses&) = delete;
 };
 
 class ExpandQuantifiers : public Walker {
@@ -1385,11 +1369,10 @@ class ExpandQuantifiers : public Walker {
 
  private:
   bool* exceeded_;
-  vector<int> stack_;
+  std::vector<int> stack_;
 
-  //DISALLOW_COPY_AND_ASSIGN(ExpandQuantifiers);
   ExpandQuantifiers(const ExpandQuantifiers&) = delete;
-  void operator=(const ExpandQuantifiers&) = delete;
+  ExpandQuantifiers& operator=(const ExpandQuantifiers&) = delete;
 };
 
 bool Parse(llvm::StringRef str, Exp* exp) {
@@ -1407,7 +1390,7 @@ bool Parse(llvm::StringRef str, Exp* exp) {
 }
 
 bool Parse(llvm::StringRef str, Exp* exp,
-           vector<Mode>* modes, vector<int>* captures) {
+           std::vector<Mode>* modes, std::vector<int>* captures) {
   redgrep_yy::Data yydata(str, exp);
   redgrep_yy::parser parser(&yydata);
   if (parser.parse() == 0) {
@@ -1438,10 +1421,10 @@ bool Match(Exp exp, llvm::StringRef str) {
 // If tagged is true, uses Antimirov partial derivatives to construct a TNFA.
 // Otherwise, uses Brzozowski derivatives to construct a DFA.
 inline size_t CompileImpl(Exp exp, bool tagged, FA* fa) {
-  map<Exp, int> states;
-  list<Exp> queue;
+  std::map<Exp, int> states;
+  std::list<Exp> queue;
   auto LookupOrInsert = [&states, &queue](Exp exp) -> int {
-    auto state = states.insert(make_pair(exp, states.size()));
+    auto state = states.insert(std::make_pair(exp, states.size()));
     if (state.first->second > 0 &&
         state.second) {
       queue.push_back(exp);
@@ -1469,9 +1452,9 @@ inline size_t CompileImpl(Exp exp, bool tagged, FA* fa) {
     } else {
       fa->accepting_[curr] = false;
     }
-    list<bitset<256>>* partitions = &fa->partitions_[curr];
+    std::list<std::bitset<256>>* partitions = &fa->partitions_[curr];
     Partitions(exp, partitions);
-    for (list<bitset<256>>::const_iterator i = partitions->begin();
+    for (std::list<std::bitset<256>>::const_iterator i = partitions->begin();
          i != partitions->end();
          ++i) {
       int byte;
@@ -1485,21 +1468,21 @@ inline size_t CompileImpl(Exp exp, bool tagged, FA* fa) {
       if (tagged) {
         TNFA* tnfa = reinterpret_cast<TNFA*>(fa);
         Outer outer = Partial(exp, byte);
-        set<pair<int, Bindings>> seen;
+        std::set<std::pair<int, Bindings>> seen;
         for (const auto& j : *outer) {
           Exp par = Normalised(j.first);
           int next = LookupOrInsert(par);
-          if (seen.count(make_pair(next, j.second)) == 0) {
-            seen.insert(make_pair(next, j.second));
+          if (seen.count(std::make_pair(next, j.second)) == 0) {
+            seen.insert(std::make_pair(next, j.second));
             if (i == partitions->begin()) {
               // Set the "default" transition.
-              tnfa->transition_.insert(make_pair(
-                  make_pair(curr, byte), make_pair(next, j.second)));
+              tnfa->transition_.insert(std::make_pair(
+                  std::make_pair(curr, byte), std::make_pair(next, j.second)));
             } else {
               for (int byte = 0; byte < 256; ++byte) {
                 if (i->test(byte)) {
-                  tnfa->transition_.insert(make_pair(
-                      make_pair(curr, byte), make_pair(next, j.second)));
+                  tnfa->transition_.insert(std::make_pair(
+                      std::make_pair(curr, byte), std::make_pair(next, j.second)));
                 }
               }
             }
@@ -1512,11 +1495,11 @@ inline size_t CompileImpl(Exp exp, bool tagged, FA* fa) {
         int next = LookupOrInsert(der);
         if (i == partitions->begin()) {
           // Set the "default" transition.
-          dfa->transition_[make_pair(curr, byte)] = next;
+          dfa->transition_[std::make_pair(curr, byte)] = next;
         } else {
           for (int byte = 0; byte < 256; ++byte) {
             if (i->test(byte)) {
-              dfa->transition_[make_pair(curr, byte)] = next;
+              dfa->transition_[std::make_pair(curr, byte)] = next;
             }
           }
         }
@@ -1539,10 +1522,10 @@ bool Match(const DFA& dfa, llvm::StringRef str) {
   while (!str.empty()) {
     int byte = str[0];
     str = str.drop_front(1);
-    auto transition = dfa.transition_.find(make_pair(curr, byte));
+    auto transition = dfa.transition_.find(std::make_pair(curr, byte));
     if (transition == dfa.transition_.end()) {
       // Get the "default" transition.
-      transition = dfa.transition_.find(make_pair(curr, -1));
+      transition = dfa.transition_.find(std::make_pair(curr, -1));
     }
     int next = transition->second;
     curr = next;
@@ -1553,7 +1536,7 @@ bool Match(const DFA& dfa, llvm::StringRef str) {
 // Applies the Bindings to offsets using pos.
 static void ApplyBindings(const Bindings& bindings,
                           int pos,
-                          vector<int>* offsets) {
+                          std::vector<int>* offsets) {
   for (const auto& i : bindings) {
     int l = 2 * i.first + 0;
     int r = 2 * i.first + 1;
@@ -1580,9 +1563,9 @@ static void ApplyBindings(const Bindings& bindings,
 }
 
 // Returns true iff x precedes y in the total order specified by modes.
-static bool Precedes(const vector<int>& x,
-                     const vector<int>& y,
-                     const vector<Mode>& modes) {
+static bool Precedes(const std::vector<int>& x,
+                     const std::vector<int>& y,
+                     const std::vector<Mode>& modes) {
   for (size_t i = 0; i < modes.size(); ++i) {
     int l = 2 * i + 0;
     int r = 2 * i + 1;
@@ -1610,13 +1593,13 @@ static bool Precedes(const vector<int>& x,
 }
 
 bool Match(const TNFA& tnfa, llvm::StringRef str,
-           vector<int>* offsets) {
-  auto CompareOffsets = [&tnfa](const pair<int, vector<int>>& x,
-                                const pair<int, vector<int>>& y) -> bool {
+           std::vector<int>* offsets) {
+  auto CompareOffsets = [&tnfa](const std::pair<int, std::vector<int>>& x,
+                                const std::pair<int, std::vector<int>>& y) -> bool {
     return Precedes(x.second, y.second, tnfa.modes_);
   };
-  list<pair<int, vector<int>>> curr_states;
-  curr_states.push_back(make_pair(0, vector<int>(2 * tnfa.modes_.size(), -1)));
+  std::list<std::pair<int, std::vector<int>>> curr_states;
+  curr_states.push_back(std::make_pair(0, std::vector<int>(2 * tnfa.modes_.size(), -1)));
   int pos = 0;
   while (!str.empty()) {
     int byte = str[0];
@@ -1625,26 +1608,26 @@ bool Match(const TNFA& tnfa, llvm::StringRef str,
     // and then sort them by comparing offsets. Doing this repeatedly from the
     // initial state and discarding next states that have been seen already in
     // the current round is intended to simulate a VM implementation.
-    list<pair<int, vector<int>>> next_states;
-    set<int> seen;
+    std::list<std::pair<int, std::vector<int>>> next_states;
+    std::set<int> seen;
     for (const auto& i : curr_states) {
       int curr = i.first;
-      pair<int, int> key = make_pair(curr, byte);
+      std::pair<int, int> key = std::make_pair(curr, byte);
       auto transition = tnfa.transition_.lower_bound(key);
       if (transition == tnfa.transition_.upper_bound(key)) {
         // Get the "default" transition.
-        key = make_pair(curr, -1);
+        key = std::make_pair(curr, -1);
         transition = tnfa.transition_.lower_bound(key);
       }
-      list<pair<int, vector<int>>> tmp;
+      std::list<std::pair<int, std::vector<int>>> tmp;
       while (transition != tnfa.transition_.upper_bound(key)) {
         int next = transition->second.first;
         if (seen.count(next) == 0 &&
             !tnfa.IsError(next)) {
           seen.insert(next);
-          vector<int> copy = i.second;
+          std::vector<int> copy = i.second;
           ApplyBindings(transition->second.second, pos, &copy);
-          tmp.push_back(make_pair(next, copy));
+          tmp.push_back(std::make_pair(next, copy));
         }
         ++transition;
       }
@@ -1657,7 +1640,7 @@ bool Match(const TNFA& tnfa, llvm::StringRef str,
   for (const auto& i : curr_states) {
     int curr = i.first;
     if (tnfa.IsAccepting(curr)) {
-      vector<int> copy = i.second;
+      std::vector<int> copy = i.second;
       ApplyBindings(tnfa.final_.find(curr)->second, pos, &copy);
       offsets->resize(2 * tnfa.captures_.size());
       for (size_t j = 0; j < tnfa.captures_.size(); ++j) {
@@ -1735,7 +1718,7 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
   // Create two BasicBlocks per DFA state: the first branches if we have hit
   // the end of the string; the second switches to the next DFA state after
   // updating the automatic variables.
-  vector<pair<llvm::BasicBlock*, llvm::BasicBlock*>> states;
+  std::vector<std::pair<llvm::BasicBlock*, llvm::BasicBlock*>> states;
   states.reserve(dfa.accepting_.size());
   for (const auto& i : dfa.accepting_) {
     llvm::BasicBlock* bb0 =
@@ -1757,7 +1740,7 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
     // but its BasicBlock might not exist yet, so we will just fix it up later.
     bb.CreateSwitch(byte, bb0);
 
-    states.push_back(make_pair(bb0, bb1));
+    states.push_back(std::make_pair(bb0, bb1));
   }
 
   // Wire up the BasicBlocks.
@@ -1793,7 +1776,7 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
     if (swi->getDefaultDest() == bb0 &&
         swi->getNumCases() == 1) {
       // What is the byte that we are trying to find?
-      fun->memchr_byte_ = swi->case_begin().getCaseValue()->getZExtValue();
+      fun->memchr_byte_ = swi->case_begin()->getCaseValue()->getZExtValue();
       // What should we return if we fail to find it?
       fun->memchr_fail_ = bra->getSuccessor(0) == return_true;
     } else {
@@ -1807,7 +1790,9 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
   // Optimise the function.
   llvm::legacy::FunctionPassManager fpm(fun->module_);
   opt.populateFunctionPassManager(fpm);
+  fpm.doInitialization();
   fpm.run(*fun->function_);
+  fpm.doFinalization();
 
   // Optimise the module.
   llvm::legacy::PassManager mpm;
@@ -1821,17 +1806,17 @@ class DiscoverMachineCodeSize : public llvm::JITEventListener {
   explicit DiscoverMachineCodeSize(Fun* fun) : fun_(fun) {}
   ~DiscoverMachineCodeSize() override {}
 
-  void NotifyObjectEmitted(
-      const llvm::object::ObjectFile& object,
-      const llvm::RuntimeDyld::LoadedObjectInfo& info) override {
+  void
+  notifyObjectLoaded(ObjectKey, const llvm::object::ObjectFile &object,
+                     const llvm::RuntimeDyld::LoadedObjectInfo &info) override {
     // We need this in order to obtain the addresses as well as the sizes.
     llvm::object::OwningBinary<llvm::object::ObjectFile> debug =
         info.getObjectForDebug(object);
-    vector<pair<llvm::object::SymbolRef, uint64_t>> symbol_sizes =
+    std::vector<std::pair<llvm::object::SymbolRef, uint64_t>> symbol_sizes =
         llvm::object::computeSymbolSizes(*debug.getBinary());
     for (const auto& i : symbol_sizes) {
-      llvm::ErrorOr<llvm::StringRef> name = i.first.getName();
-      llvm::ErrorOr<uint64_t> addr = i.first.getAddress();
+      llvm::Expected<llvm::StringRef> name = i.first.getName();
+      llvm::Expected<uint64_t> addr = i.first.getAddress();
       if (name && addr && *name == "F") {
         fun_->machine_code_addr_ = *addr;
         fun_->machine_code_size_ = i.second;
@@ -1844,9 +1829,8 @@ class DiscoverMachineCodeSize : public llvm::JITEventListener {
  private:
   Fun* fun_;
 
-  //DISALLOW_COPY_AND_ASSIGN(DiscoverMachineCodeSize);
   DiscoverMachineCodeSize(const DiscoverMachineCodeSize&) = delete;
-  void operator=(const DiscoverMachineCodeSize&) = delete;
+  DiscoverMachineCodeSize& operator=(const DiscoverMachineCodeSize&) = delete;
 };
 
 // Generates the machine code for the function.

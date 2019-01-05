@@ -22,18 +22,8 @@
 #include <set>
 #include <tuple>
 #include <utility>
-#include <vector>
 
 #include "regexp.h"
-
-using std::list;
-using std::make_pair;
-using std::make_tuple;
-using std::map;
-using std::pair;
-using std::set;
-using std::tuple;
-using std::vector;
 
 static void EmitHeader() {
   printf("digraph reddot {\n");
@@ -66,7 +56,7 @@ static void EmitFooter() {
 }
 
 inline void HandleImpl(int nstates, const redgrep::FA& fa,
-                       const set<tuple<int, int, int>>& transition_set) {
+                       const std::set<std::tuple<int, int, int>>& transition_set) {
   EmitHeader();
   for (int i = 0; i < nstates; ++i) {
     int curr = i;
@@ -81,17 +71,17 @@ inline void HandleImpl(int nstates, const redgrep::FA& fa,
       EmitState(curr, "white");
     }
   }
-  map<pair<int, int>, list<pair<int, int>>> transition_map;
+  std::map<std::pair<int, int>, std::list<std::pair<int, int>>> transition_map;
   for (const auto& i : transition_set) {
     int curr; int next; int byte;
     std::tie(curr, next, byte) = i;
     if (byte == -1) {
       EmitTransition(curr, next, byte);
     } else {
-      auto& range_list = transition_map[make_pair(curr, next)];
+      auto& range_list = transition_map[std::make_pair(curr, next)];
       if (range_list.empty() ||
           range_list.back().second + 1 != byte) {
-        range_list.push_back(make_pair(byte, byte));
+        range_list.push_back(std::make_pair(byte, byte));
       } else {
         range_list.back().second = byte;
       }
@@ -121,13 +111,13 @@ static void HandleDFA(const char* str) {
     errx(1, "parse error");
   }
   int nstates = redgrep::Compile(exp, &dfa);
-  set<tuple<int, int, int>> transition_set;
+  std::set<std::tuple<int, int, int>> transition_set;
   for (const auto& i : dfa.transition_) {
     int curr = i.first.first;
     int byte = i.first.second;
     int next = i.second;
     if (!dfa.IsError(next)) {
-      transition_set.insert(make_tuple(curr, next, byte));
+      transition_set.insert(std::make_tuple(curr, next, byte));
     }
   }
   HandleImpl(nstates, dfa, transition_set);
@@ -140,14 +130,14 @@ static void HandleTNFA(const char* str) {
     errx(1, "parse error");
   }
   int nstates = redgrep::Compile(exp, &tnfa);
-  set<tuple<int, int, int>> transition_set;
+  std::set<std::tuple<int, int, int>> transition_set;
   for (const auto& i : tnfa.transition_) {
     int curr = i.first.first;
     int byte = i.first.second;
     int next = i.second.first;
     // TODO(junyer): Bindings?
     if (!tnfa.IsError(next)) {
-      transition_set.insert(make_tuple(curr, next, byte));
+      transition_set.insert(std::make_tuple(curr, next, byte));
     }
   }
   HandleImpl(nstates, tnfa, transition_set);

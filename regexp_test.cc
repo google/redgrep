@@ -409,7 +409,7 @@ TEST(Derivative, Disjunction) {
 
 #define EXPECT_OUTERSET(expected, outer)  \
   do {                                    \
-    list<Exp> subs;                       \
+    std::list<Exp> subs;                  \
     for (const auto& i : *outer) {        \
       subs.push_back(i.first);            \
     }                                     \
@@ -558,17 +558,17 @@ TEST(Partial, Disjunction) {
       Disjunction(Byte('a'), Byte('b')));
 }
 
-#define EXPECT_PARTITIONS(expected, exp)  \
-  do {                                    \
-    list<bitset<256>> partitions;         \
-    Partitions(exp, &partitions);         \
-    EXPECT_EQ(expected, partitions);      \
+#define EXPECT_PARTITIONS(expected, exp)    \
+  do {                                      \
+    std::list<std::bitset<256>> partitions; \
+    Partitions(exp, &partitions);           \
+    EXPECT_EQ(expected, partitions);        \
   } while (0)
 
 template <typename... Variadic>
-inline bitset<256> BitSet(Variadic... bits) {
-  set<int> s({bits...});
-  bitset<256> bs;
+inline std::bitset<256> BitSet(Variadic... bits) {
+  std::set<int> s({bits...});
+  std::bitset<256> bs;
   for (int bit : s) {
     bs.set(bit);
   }
@@ -577,82 +577,82 @@ inline bitset<256> BitSet(Variadic... bits) {
 
 TEST(Partitions, EmptySet) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet()}),
+      std::list<std::bitset<256>>({BitSet()}),
       EmptySet());
 }
 
 TEST(Partitions, EmptyString) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet()}),
+      std::list<std::bitset<256>>({BitSet()}),
       EmptyString());
 }
 
 TEST(Partitions, Group) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet('a'),
-                         BitSet('a')}),
+      std::list<std::bitset<256>>({BitSet('a'),
+                                   BitSet('a')}),
       Group(0, Byte('a'), kPassive, true));
 }
 
 TEST(Partitions, AnyByte) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet()}),
+      std::list<std::bitset<256>>({BitSet()}),
       AnyByte());
 }
 
 TEST(Partitions, Byte) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet('a'),
-                         BitSet('a')}),
+      std::list<std::bitset<256>>({BitSet('a'),
+                                   BitSet('a')}),
       Byte('a'));
 }
 
 TEST(Partitions, ByteRange) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet('a', 'b', 'c'),
-                         BitSet('a', 'b', 'c')}),
+      std::list<std::bitset<256>>({BitSet('a', 'b', 'c'),
+                                   BitSet('a', 'b', 'c')}),
       ByteRange('a', 'c'));
 }
 
 TEST(Partitions, KleeneClosure) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet('a'),
-                         BitSet('a')}),
+      std::list<std::bitset<256>>({BitSet('a'),
+                                   BitSet('a')}),
       KleeneClosure(Byte('a')));
 }
 
 TEST(Partitions, Concatenation) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet('a'),
-                         BitSet('a')}),
+      std::list<std::bitset<256>>({BitSet('a'),
+                                   BitSet('a')}),
       Concatenation(Byte('a'), Byte('b')));
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet('a', 'b'),
-                         BitSet('b'),
-                         BitSet('a')}),
+      std::list<std::bitset<256>>({BitSet('a', 'b'),
+                                   BitSet('b'),
+                                   BitSet('a')}),
       Concatenation(KleeneClosure(Byte('a')), Byte('b')));
 }
 
 TEST(Partitions, Complement) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet('a'),
-                         BitSet('a')}),
+      std::list<std::bitset<256>>({BitSet('a'),
+                                   BitSet('a')}),
       Complement(Byte('a')));
 }
 
 TEST(Partitions, Conjunction) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet('a', 'b'),
-                         BitSet('b'),
-                         BitSet('a')}),
+      std::list<std::bitset<256>>({BitSet('a', 'b'),
+                                   BitSet('b'),
+                                   BitSet('a')}),
       Conjunction(Byte('a'), Byte('b')));
 }
 
 TEST(Partitions, Disjunction) {
   EXPECT_PARTITIONS(
-      list<bitset<256>>({BitSet('a', 'b'),
-                         BitSet('b'),
-                         BitSet('a')}),
+      std::list<std::bitset<256>>({BitSet('a', 'b'),
+                                   BitSet('b'),
+                                   BitSet('a')}),
       Disjunction(Byte('a'), Byte('b')));
 }
 
@@ -953,8 +953,8 @@ TEST(Parse, CountedRepetition) {
 #define EXPECT_PARSE_M_C(expected, expected_modes, expected_captures, str)  \
   do {                                                                      \
     Exp exp;                                                                \
-    vector<Mode> modes;                                                     \
-    vector<int> captures;                                                   \
+    std::vector<Mode> modes;                                                \
+    std::vector<int> captures;                                              \
     ASSERT_TRUE(Parse(str, &exp, &modes, &captures));                       \
     EXPECT_EQ(expected, exp);                                               \
     EXPECT_EQ(expected_modes, modes);                                       \
@@ -968,8 +968,8 @@ TEST(Parse_M_C, Parentheses) {
                 Byte('a'),
                 Byte('b')),
             kPassive, false),
-      vector<Mode>({kPassive}),
-      vector<int>({}),
+      std::vector<Mode>({kPassive}),
+      std::vector<int>({}),
       "(?:ab)");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -977,8 +977,8 @@ TEST(Parse_M_C, Parentheses) {
                 Byte('a'),
                 Byte('b')),
             kPassive, true),
-      vector<Mode>({kPassive}),
-      vector<int>({0}),
+      std::vector<Mode>({kPassive}),
+      std::vector<int>({0}),
       "(ab)");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -988,8 +988,8 @@ TEST(Parse_M_C, Parentheses) {
                       kPassive, true),
                 Byte('b')),
             kPassive, true),
-      vector<Mode>({kPassive, kPassive}),
-      vector<int>({0, 1}),
+      std::vector<Mode>({kPassive, kPassive}),
+      std::vector<int>({0, 1}),
       "((a)b)");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -999,8 +999,8 @@ TEST(Parse_M_C, Parentheses) {
                       Byte('b'),
                       kPassive, true)),
             kPassive, true),
-      vector<Mode>({kPassive, kPassive}),
-      vector<int>({0, 1}),
+      std::vector<Mode>({kPassive, kPassive}),
+      std::vector<int>({0, 1}),
       "(a(b))");
   EXPECT_PARSE_M_C(
       Concatenation(
@@ -1010,8 +1010,8 @@ TEST(Parse_M_C, Parentheses) {
           Group(1,
                 Byte('b'),
                 kPassive, true)),
-      vector<Mode>({kPassive, kPassive}),
-      vector<int>({0, 1}),
+      std::vector<Mode>({kPassive, kPassive}),
+      std::vector<int>({0, 1}),
       "(a)(b)");
 }
 
@@ -1020,15 +1020,15 @@ TEST(Parse_M_C, Quantifiers) {
       Group(0,
             KleeneClosure(Byte('a')),
             kMaximal, false),
-      vector<Mode>({kMaximal}),
-      vector<int>({}),
+      std::vector<Mode>({kMaximal}),
+      std::vector<int>({}),
       "a*");
   EXPECT_PARSE_M_C(
       Group(0,
             KleeneClosure(Byte('a')),
             kMinimal, false),
-      vector<Mode>({kMinimal}),
-      vector<int>({}),
+      std::vector<Mode>({kMinimal}),
+      std::vector<int>({}),
       "a*?");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -1036,8 +1036,8 @@ TEST(Parse_M_C, Quantifiers) {
                 Byte('a'),
                 KleeneClosure(Byte('a'))),
             kMaximal, false),
-      vector<Mode>({kMaximal}),
-      vector<int>({}),
+      std::vector<Mode>({kMaximal}),
+      std::vector<int>({}),
       "a+");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -1045,8 +1045,8 @@ TEST(Parse_M_C, Quantifiers) {
                 Byte('a'),
                 KleeneClosure(Byte('a'))),
             kMinimal, false),
-      vector<Mode>({kMinimal}),
-      vector<int>({}),
+      std::vector<Mode>({kMinimal}),
+      std::vector<int>({}),
       "a+?");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -1054,8 +1054,8 @@ TEST(Parse_M_C, Quantifiers) {
                 EmptyString(),
                 Byte('a')),
             kMaximal, false),
-      vector<Mode>({kMaximal}),
-      vector<int>({}),
+      std::vector<Mode>({kMaximal}),
+      std::vector<int>({}),
       "a?");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -1063,22 +1063,22 @@ TEST(Parse_M_C, Quantifiers) {
                 EmptyString(),
                 Byte('a')),
             kMinimal, false),
-      vector<Mode>({kMinimal}),
-      vector<int>({}),
+      std::vector<Mode>({kMinimal}),
+      std::vector<int>({}),
       "a??");
   EXPECT_PARSE_M_C(
       Group(0,
             Byte('a'),
             kMaximal, false),
-      vector<Mode>({kMaximal}),
-      vector<int>({}),
+      std::vector<Mode>({kMaximal}),
+      std::vector<int>({}),
       "a{1}");
   EXPECT_PARSE_M_C(
       Group(0,
             Byte('a'),
             kMinimal, false),
-      vector<Mode>({kMinimal}),
-      vector<int>({}),
+      std::vector<Mode>({kMinimal}),
+      std::vector<int>({}),
       "a{1}?");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -1086,8 +1086,8 @@ TEST(Parse_M_C, Quantifiers) {
                 Byte('a'),
                 KleeneClosure(Byte('a'))),
             kMaximal, false),
-      vector<Mode>({kMaximal}),
-      vector<int>({}),
+      std::vector<Mode>({kMaximal}),
+      std::vector<int>({}),
       "a{1,}");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -1095,8 +1095,8 @@ TEST(Parse_M_C, Quantifiers) {
                 Byte('a'),
                 KleeneClosure(Byte('a'))),
             kMinimal, false),
-      vector<Mode>({kMinimal}),
-      vector<int>({}),
+      std::vector<Mode>({kMinimal}),
+      std::vector<int>({}),
       "a{1,}?");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -1106,8 +1106,8 @@ TEST(Parse_M_C, Quantifiers) {
                     EmptyString(),
                     Byte('a'))),
             kMaximal, false),
-      vector<Mode>({kMaximal}),
-      vector<int>({}),
+      std::vector<Mode>({kMaximal}),
+      std::vector<int>({}),
       "a{1,2}");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -1117,24 +1117,24 @@ TEST(Parse_M_C, Quantifiers) {
                     EmptyString(),
                     Byte('a'))),
             kMinimal, false),
-      vector<Mode>({kMinimal}),
-      vector<int>({}),
+      std::vector<Mode>({kMinimal}),
+      std::vector<int>({}),
       "a{1,2}?");
 }
 
 TEST(Parse_M_C, ApplyGroups) {
   EXPECT_PARSE_M_C(
       AnyCharacter(),
-      vector<Mode>({}),
-      vector<int>({}),
+      std::vector<Mode>({}),
+      std::vector<int>({}),
       ".");
   EXPECT_PARSE_M_C(
       Disjunction(
           Byte('a'),
           Byte('b'),
           Byte('c')),
-      vector<Mode>({}),
-      vector<int>({}),
+      std::vector<Mode>({}),
+      std::vector<int>({}),
       "[abc]");
   EXPECT_PARSE_M_C(
       Conjunction(
@@ -1144,8 +1144,8 @@ TEST(Parse_M_C, ApplyGroups) {
                   Byte('b'),
                   Byte('c'))),
           AnyCharacter()),
-      vector<Mode>({}),
-      vector<int>({}),
+      std::vector<Mode>({}),
+      std::vector<int>({}),
       "[^abc]");
   EXPECT_PARSE_M_C(
       Disjunction(
@@ -1158,8 +1158,8 @@ TEST(Parse_M_C, ApplyGroups) {
           Group(2,
                 Concatenation(Byte('c'), Byte('c'), Byte('c')),
                 kPassive, false)),
-      vector<Mode>({kPassive, kPassive, kPassive}),
-      vector<int>({}),
+      std::vector<Mode>({kPassive, kPassive, kPassive}),
+      std::vector<int>({}),
       "aaa|bbb|ccc");
   EXPECT_PARSE_M_C(
       Group(0,
@@ -1169,14 +1169,14 @@ TEST(Parse_M_C, ApplyGroups) {
                     Byte('b'),
                     Byte('c'))),
             kMaximal, false),
-      vector<Mode>({kMaximal}),
-      vector<int>({}),
+      std::vector<Mode>({kMaximal}),
+      std::vector<int>({}),
       "!abc");
 }
 
 #define EXPECT_MATCH(expected, expected_values, str)  \
   do {                                                \
-    vector<int> values;                               \
+    std::vector<int> values;                          \
     if (expected) {                                   \
       EXPECT_TRUE(Match(exp1_, str));                 \
       EXPECT_TRUE(Match(dfa_, str));                  \
@@ -1215,352 +1215,352 @@ class MatchTest : public testing::Test {
 TEST_F(MatchTest, EmptySet) {
   exp1_ = exp2_ = EmptySet();
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
 }
 
 TEST_F(MatchTest, EmptyString) {
   exp1_ = exp2_ = EmptyString();
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
 }
 
 TEST_F(MatchTest, EscapeSequences_1) {
   ParseAll("(\\C)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1}), "a");
 }
 
 TEST_F(MatchTest, EscapeSequences_2) {
   ParseAll("(\\f\\n\\r\\t)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "fnrt");
-  EXPECT_MATCH(true, vector<int>({0, 4}), "\f\n\r\t");
-  EXPECT_MATCH(false, vector<int>({}), "\\f\\n\\r\\t");
+  EXPECT_MATCH(false, std::vector<int>({}), "fnrt");
+  EXPECT_MATCH(true, std::vector<int>({0, 4}), "\f\n\r\t");
+  EXPECT_MATCH(false, std::vector<int>({}), "\\f\\n\\r\\t");
 }
 
 TEST_F(MatchTest, AnyCharacter) {
   ParseAll("(.)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 2}), "¬");
-  EXPECT_MATCH(true, vector<int>({0, 3}), "兔");
-  EXPECT_MATCH(true, vector<int>({0, 4}), "💩");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 2}), "¬");
+  EXPECT_MATCH(true, std::vector<int>({0, 3}), "兔");
+  EXPECT_MATCH(true, std::vector<int>({0, 4}), "💩");
 }
 
 TEST_F(MatchTest, Character_1) {
   ParseAll("(a)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
-  EXPECT_MATCH(false, vector<int>({}), "X");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1}), "a");
+  EXPECT_MATCH(false, std::vector<int>({}), "X");
 }
 
 TEST_F(MatchTest, Character_2) {
   ParseAll("(¬)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(true, vector<int>({0, 2}), "¬");
-  EXPECT_MATCH(false, vector<int>({}), "X");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 2}), "¬");
+  EXPECT_MATCH(false, std::vector<int>({}), "X");
 }
 
 TEST_F(MatchTest, Character_3) {
   ParseAll("(兔)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(true, vector<int>({0, 3}), "兔");
-  EXPECT_MATCH(false, vector<int>({}), "X");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 3}), "兔");
+  EXPECT_MATCH(false, std::vector<int>({}), "X");
 }
 
 TEST_F(MatchTest, Character_4) {
   ParseAll("(💩)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(true, vector<int>({0, 4}), "💩");
-  EXPECT_MATCH(false, vector<int>({}), "X");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 4}), "💩");
+  EXPECT_MATCH(false, std::vector<int>({}), "X");
 }
 
 TEST_F(MatchTest, CharacterClass_1) {
   ParseAll("([a¬兔💩])");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 2}), "¬");
-  EXPECT_MATCH(true, vector<int>({0, 3}), "兔");
-  EXPECT_MATCH(true, vector<int>({0, 4}), "💩");
-  EXPECT_MATCH(false, vector<int>({}), "X");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 2}), "¬");
+  EXPECT_MATCH(true, std::vector<int>({0, 3}), "兔");
+  EXPECT_MATCH(true, std::vector<int>({0, 4}), "💩");
+  EXPECT_MATCH(false, std::vector<int>({}), "X");
 }
 
 TEST_F(MatchTest, CharacterClass_2) {
   ParseAll("([^a¬兔💩])");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(false, vector<int>({}), "¬");
-  EXPECT_MATCH(false, vector<int>({}), "兔");
-  EXPECT_MATCH(false, vector<int>({}), "💩");
-  EXPECT_MATCH(true, vector<int>({0, 1}), "X");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(false, std::vector<int>({}), "¬");
+  EXPECT_MATCH(false, std::vector<int>({}), "兔");
+  EXPECT_MATCH(false, std::vector<int>({}), "💩");
+  EXPECT_MATCH(true, std::vector<int>({0, 1}), "X");
 }
 
 TEST_F(MatchTest, Quantifiers_1) {
   ParseAll("(a*)");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 0}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 3}), "aaa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_2) {
   ParseAll("(a*)(a*)");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 0, 0, 0}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 2, 2, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 3, 3, 3}), "aaa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, 0, 0}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, 2, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 3, 3, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_3) {
   ParseAll("(a*?)(a*)");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 0, 0, 0}), "");
-  EXPECT_MATCH(true, vector<int>({0, 0, 0, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 0, 0, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 0, 0, 3}), "aaa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, 0, 0}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, 0, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, 0, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, 0, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_4) {
   ParseAll("(a+)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 3}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_5) {
   ParseAll("(a+)(a+)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 2, 2, 3}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, 2, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_6) {
   ParseAll("(a+?)(a+)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 3}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_7) {
   ParseAll("(a?)");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 0}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
-  EXPECT_MATCH(false, vector<int>({}), "aa");
-  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1}), "a");
+  EXPECT_MATCH(false, std::vector<int>({}), "aa");
+  EXPECT_MATCH(false, std::vector<int>({}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_8) {
   ParseAll("(a?)(a?)");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 0, 0, 0}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
-  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, 0, 0}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(false, std::vector<int>({}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_9) {
   ParseAll("(a?""?)(a?)");  // Avoid trigraph.
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 0, 0, 0}), "");
-  EXPECT_MATCH(true, vector<int>({0, 0, 0, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
-  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, 0, 0}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, 0, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(false, std::vector<int>({}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_10) {
   ParseAll("(a{1})");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
-  EXPECT_MATCH(false, vector<int>({}), "aa");
-  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1}), "a");
+  EXPECT_MATCH(false, std::vector<int>({}), "aa");
+  EXPECT_MATCH(false, std::vector<int>({}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_11) {
   ParseAll("(a{1})(a{1})");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
-  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(false, std::vector<int>({}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_12) {
   ParseAll("(a{1}?)(a{1})");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
-  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(false, std::vector<int>({}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_13) {
   ParseAll("(a{1,})");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 3}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_14) {
   ParseAll("(a{1,})(a{1,})");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 2, 2, 3}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, 2, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_15) {
   ParseAll("(a{1,}?)(a{1,})");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 3}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_16) {
   ParseAll("(a{1,2})");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
-  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 2}), "aa");
+  EXPECT_MATCH(false, std::vector<int>({}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_17) {
   ParseAll("(a{1,2})(a{1,2})");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 2, 2, 3}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, 2, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Quantifiers_18) {
   ParseAll("(a{1,2}?)(a{1,2})");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 1, 1, 3}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, 1, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Concatenation) {
   ParseAll("(aa)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
-  EXPECT_MATCH(false, vector<int>({}), "aaa");
+  EXPECT_MATCH(false, std::vector<int>({}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 2}), "aa");
+  EXPECT_MATCH(false, std::vector<int>({}), "aaa");
 }
 
 TEST_F(MatchTest, Complement_1) {
   ParseAll("(!a)");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 0}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 3}), "aaa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 3}), "aaa");
 }
 
 TEST_F(MatchTest, Complement_2) {
   ParseAll("(!(a))");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1}), "");
-  EXPECT_MATCH(false, vector<int>({}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 2, -1, -1}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 3, -1, -1}), "aaa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, -1, -1}), "");
+  EXPECT_MATCH(false, std::vector<int>({}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, -1, -1}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 3, -1, -1}), "aaa");
 }
 
 TEST_F(MatchTest, Conjunction_1) {
   ParseAll("(a.)&(.b)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 2, 0, 2}), "ab");
-  EXPECT_MATCH(false, vector<int>({}), "ba");
-  EXPECT_MATCH(false, vector<int>({}), "bb");
+  EXPECT_MATCH(false, std::vector<int>({}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, 0, 2}), "ab");
+  EXPECT_MATCH(false, std::vector<int>({}), "ba");
+  EXPECT_MATCH(false, std::vector<int>({}), "bb");
 }
 
 TEST_F(MatchTest, Conjunction_2) {
   ParseAll("(a.*)&(.*b)");
   CompileAll();
-  EXPECT_MATCH(false, vector<int>({}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 2, 0, 2}), "ab");
-  EXPECT_MATCH(false, vector<int>({}), "ba");
-  EXPECT_MATCH(false, vector<int>({}), "bb");
-  EXPECT_MATCH(false, vector<int>({}), "aXa");
-  EXPECT_MATCH(true, vector<int>({0, 3, 0, 3}), "aXb");
-  EXPECT_MATCH(false, vector<int>({}), "bXa");
-  EXPECT_MATCH(false, vector<int>({}), "bXb");
+  EXPECT_MATCH(false, std::vector<int>({}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, 0, 2}), "ab");
+  EXPECT_MATCH(false, std::vector<int>({}), "ba");
+  EXPECT_MATCH(false, std::vector<int>({}), "bb");
+  EXPECT_MATCH(false, std::vector<int>({}), "aXa");
+  EXPECT_MATCH(true, std::vector<int>({0, 3, 0, 3}), "aXb");
+  EXPECT_MATCH(false, std::vector<int>({}), "bXa");
+  EXPECT_MATCH(false, std::vector<int>({}), "bXb");
 }
 
 TEST_F(MatchTest, Disjunction_1) {
   ParseAll("(a.)|(.b)");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 2, -1, -1}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 2, -1, -1}), "ab");
-  EXPECT_MATCH(false, vector<int>({}), "ba");
-  EXPECT_MATCH(true, vector<int>({-1, -1, 0, 2}), "bb");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, -1, -1}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, -1, -1}), "ab");
+  EXPECT_MATCH(false, std::vector<int>({}), "ba");
+  EXPECT_MATCH(true, std::vector<int>({-1, -1, 0, 2}), "bb");
 }
 
 TEST_F(MatchTest, Disjunction_2) {
   ParseAll("(a.*)|(.*b)");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 2, -1, -1}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 2, -1, -1}), "ab");
-  EXPECT_MATCH(false, vector<int>({}), "ba");
-  EXPECT_MATCH(true, vector<int>({-1, -1, 0, 2}), "bb");
-  EXPECT_MATCH(true, vector<int>({0, 3, -1, -1}), "aXa");
-  EXPECT_MATCH(true, vector<int>({0, 3, -1, -1}), "aXb");
-  EXPECT_MATCH(false, vector<int>({}), "bXa");
-  EXPECT_MATCH(true, vector<int>({-1, -1, 0, 3}), "bXb");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, -1, -1}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, -1, -1}), "ab");
+  EXPECT_MATCH(false, std::vector<int>({}), "ba");
+  EXPECT_MATCH(true, std::vector<int>({-1, -1, 0, 2}), "bb");
+  EXPECT_MATCH(true, std::vector<int>({0, 3, -1, -1}), "aXa");
+  EXPECT_MATCH(true, std::vector<int>({0, 3, -1, -1}), "aXb");
+  EXPECT_MATCH(false, std::vector<int>({}), "bXa");
+  EXPECT_MATCH(true, std::vector<int>({-1, -1, 0, 3}), "bXb");
 }
 
 TEST_F(MatchTest, PerlSemantics_1) {
   ParseAll("(?:(a*?)|(a*))(a*)");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1, 0, 0}), "");
-  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1, 0, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1, 0, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1, 0, 3}), "aaa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, -1, -1, 0, 0}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, -1, -1, 0, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, -1, -1, 0, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, -1, -1, 0, 3}), "aaa");
 }
 
 TEST_F(MatchTest, PerlSemantics_2) {
   ParseAll("(?:(a*)|(a*?))(a*)");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({0, 0, -1, -1, 0, 0}), "");
-  EXPECT_MATCH(true, vector<int>({0, 1, -1, -1, 1, 1}), "a");
-  EXPECT_MATCH(true, vector<int>({0, 2, -1, -1, 2, 2}), "aa");
-  EXPECT_MATCH(true, vector<int>({0, 3, -1, -1, 3, 3}), "aaa");
+  EXPECT_MATCH(true, std::vector<int>({0, 0, -1, -1, 0, 0}), "");
+  EXPECT_MATCH(true, std::vector<int>({0, 1, -1, -1, 1, 1}), "a");
+  EXPECT_MATCH(true, std::vector<int>({0, 2, -1, -1, 2, 2}), "aa");
+  EXPECT_MATCH(true, std::vector<int>({0, 3, -1, -1, 3, 3}), "aaa");
 }
 
 // http://swtch.com/~rsc/regexp/regexp2.html#posix
 TEST_F(MatchTest, PerlSemantics_3) {
   ParseAll("(a|bcdef|g|ab|c|d|e|efg|fg)*");
   CompileAll();
-  EXPECT_MATCH(true, vector<int>({6, 7}), "abcdefg");
+  EXPECT_MATCH(true, std::vector<int>({6, 7}), "abcdefg");
 }
 
 }  // namespace redgrep
