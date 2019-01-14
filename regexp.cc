@@ -42,7 +42,6 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/TypeBuilder.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Object/SymbolSize.h"
@@ -1653,18 +1652,14 @@ bool Match(const TNFA& tnfa, llvm::StringRef str,
   return false;
 }
 
-}  // namespace redgrep
-
-namespace llvm {
-
-template <>
-class TypeBuilder<bool, false> : public TypeBuilder<types::i<1>, false> {};
-
-}  // namespace llvm
-
-namespace redgrep {
-
 typedef bool NativeMatch(const char*, size_t);
+
+static llvm::FunctionType* getNativeMatchFnTy(llvm::LLVMContext& context) {
+  return llvm::FunctionType::get(llvm::Type::getInt1Ty(context),
+                                 {llvm::Type::getInt8PtrTy(context),
+                                  llvm::Type::getScalarTy<size_t>(context)},
+                                 false);
+}
 
 Fun::Fun() {
   static std::once_flag once_flag;
@@ -1678,9 +1673,9 @@ Fun::Fun() {
   engine_.reset(llvm::EngineBuilder(std::unique_ptr<llvm::Module>(module_))
                     .setMCPU(llvm::sys::getHostCPUName())
                     .create());
-  function_ = llvm::Function::Create(
-      llvm::TypeBuilder<NativeMatch, false>::get(*context_),
-      llvm::GlobalValue::ExternalLinkage, "F", module_);
+  function_ =
+      llvm::Function::Create(getNativeMatchFnTy(*context_),
+                             llvm::GlobalValue::ExternalLinkage, "F", module_);
 }
 
 Fun::~Fun() {}
@@ -1696,9 +1691,9 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
       llvm::BasicBlock::Create(context, "entry", fun->function_);
   bb.SetInsertPoint(entry);
   llvm::AllocaInst* data = bb.CreateAlloca(
-      llvm::TypeBuilder<const char*, false>::get(context), nullptr, "data");
+      llvm::Type::getInt8PtrTy(context), nullptr, "data");
   llvm::AllocaInst* size = bb.CreateAlloca(
-      llvm::TypeBuilder<size_t, false>::get(context), nullptr, "size");
+      llvm::Type::getScalarTy<size_t>(context), nullptr, "size");
   llvm::Function::arg_iterator arg = fun->function_->arg_begin();
   bb.CreateStore(&*arg++, data);
   bb.CreateStore(&*arg++, size);
@@ -1754,11 +1749,9 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
       // Set the "default" transition.
       swi->setDefaultDest(bb0);
     } else {
-      swi->addCase(
-          llvm::ConstantInt::get(
-              llvm::TypeBuilder<char, false>::get(context),
-              i.first.second),
-          bb0);
+      swi->addCase(llvm::ConstantInt::get(llvm::Type::getInt8Ty(context),
+                                          i.first.second),
+                   bb0);
     }
   }
 
