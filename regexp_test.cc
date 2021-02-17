@@ -167,9 +167,6 @@ TEST(Normalised, KleeneClosure) {
   EXPECT_NORMALISED(
       Complement(EmptySet()),
       KleeneClosure(AnyByte()));
-  EXPECT_NORMALISED(
-      Complement(EmptySet()),
-      KleeneClosure(AnyCharacter()));
 }
 
 TEST(Normalised, Concatenation) {

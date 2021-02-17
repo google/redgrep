@@ -378,12 +378,6 @@ Exp Normalised(Exp exp) {
       if (sub->kind() == kAnyByte) {
         return Complement({EmptySet()}, true);
       }
-      // .∗ ≈ ¬∅
-      // This is not strictly correct, but it is not the regular expression
-      // engine's job to ensure that the input is structurally valid UTF-8.
-      if (sub == AnyCharacter()) {
-        return Complement({EmptySet()}, true);
-      }
       return KleeneClosure({sub}, true);
     }
 

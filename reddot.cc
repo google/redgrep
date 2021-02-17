@@ -25,8 +25,11 @@
 
 #include "regexp.h"
 
-static void EmitHeader() {
+static void EmitHeader(const char* str) {
   printf("digraph reddot {\n");
+  // TODO(junyer): Escape double quotes?
+  printf("label=\"%s\"\n", str);
+  printf("labelloc=\"t\"\n");
 }
 
 static void EmitState(int curr, const char* fillcolor) {
@@ -55,9 +58,9 @@ static void EmitFooter() {
   printf("}\n");
 }
 
-inline void HandleImpl(int nstates, const redgrep::FA& fa,
+inline void HandleImpl(const char* str, int nstates, const redgrep::FA& fa,
                        const std::set<std::tuple<int, int, int>>& transition_set) {
-  EmitHeader();
+  EmitHeader(str);
   for (int i = 0; i < nstates; ++i) {
     int curr = i;
     if (fa.IsError(curr)) {
@@ -116,11 +119,11 @@ static void HandleDFA(const char* str) {
     int curr = i.first.first;
     int byte = i.first.second;
     int next = i.second;
-    if (!dfa.IsError(next)) {
+    if (!dfa.IsError(next) || byte != -1) {
       transition_set.insert(std::make_tuple(curr, next, byte));
     }
   }
-  HandleImpl(nstates, dfa, transition_set);
+  HandleImpl(str, nstates, dfa, transition_set);
 }
 
 static void HandleTNFA(const char* str) {
@@ -136,11 +139,11 @@ static void HandleTNFA(const char* str) {
     int byte = i.first.second;
     int next = i.second.first;
     // TODO(junyer): Bindings?
-    if (!tnfa.IsError(next)) {
+    if (!tnfa.IsError(next) || byte != -1) {
       transition_set.insert(std::make_tuple(curr, next, byte));
     }
   }
-  HandleImpl(nstates, tnfa, transition_set);
+  HandleImpl(str, nstates, tnfa, transition_set);
 }
 
 int main(int argc, char** argv) {

@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
   printf("; fun is %d bytes\n", nbytes);
 
   std::string triple = fun.engine_->getTargetMachine()->getTargetTriple().str();
-  std::string cpu = fun.engine_->getTargetMachine()->getTargetCPU();
+  std::string cpu(fun.engine_->getTargetMachine()->getTargetCPU());
   printf("; target is %s (%s)\n", triple.c_str(), cpu.c_str());
 
   // We need these for the disassembler.
