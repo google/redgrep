@@ -20,7 +20,7 @@ CXX :=		g++
 CXXFLAGS :=	$(CFLAGS)
 CPPFLAGS :=	
 LDFLAGS :=	
-LDLIBS :=	-lpthread -lstdc++
+LDLIBS :=	-lm -lpthread -lstdc++
 
 LLVM_CONFIG ?=	llvm-config
 CFLAGS +=	$(shell $(LLVM_CONFIG) --cflags)
