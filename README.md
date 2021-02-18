@@ -13,19 +13,27 @@ match them in linear time.
 
 ## Building
 
-You must have GNU make, GNU bison and either GCC or Clang.
+You must have Bazel, GNU bison and either GCC or Clang.
 
-redgrep follows the "latest and greatest" in LLVM development, so you should
-check out the source from
-[Subversion](https://llvm.org/docs/GettingStarted.html#checkout-llvm-from-subversion)
-or [Git](https://llvm.org/docs/GettingStarted.html#git-mirror), then configure,
-build, check and install as per the
-[instructions](https://llvm.org/docs/GettingStarted.html#getting-started-quickly-a-summary).
-(Debian and Ubuntu users may prefer to install the
+redgrep attempts to keep up with LLVM development, so you should
+[get the source code and build LLVM](https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-llvm).
+(Debian and Ubuntu users might prefer to install the
 [nightly packages](https://apt.llvm.org/) instead.)
 
-You should set the `LLVM_CONFIG` environment variable appropriately when you run
-`make`.
+If `llvm-config-11` is in your path, add the following to your `WORKSPACE` file:
+
+```
+load("@com_github_google_redgrep//:redgrep_configure.bzl", "redgrep_configure")
+redgrep_configure(name = "local_config_redgrep")
+```
+
+Otherwise, add the following to your `WORKSPACE` file and specify the path to
+`llvm-config-11`:
+
+```
+load("@com_github_google_redgrep//:redgrep_configure.bzl", "redgrep_configure")
+redgrep_configure(name = "local_config_redgrep", llvm_config = "/path/to/llvm-config-11")
+```
 
 ## Contact
 
