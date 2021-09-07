@@ -19,8 +19,8 @@ load("@com_github_google_redgrep//:redgrep_configure.bzl", "redgrep_configure")
 
 http_archive(
     name = "rules_cc",
-    strip_prefix = "rules_cc-master",
-    urls = ["https://github.com/bazelbuild/rules_cc/archive/master.zip"],
+    strip_prefix = "rules_cc-main",
+    urls = ["https://github.com/bazelbuild/rules_cc/archive/main.zip"],
 )
 
 http_archive(

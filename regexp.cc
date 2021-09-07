@@ -40,17 +40,17 @@
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Object/SymbolSize.h"
 #include "llvm/Object/SymbolicFile.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Target/TargetMachine.h"
 #include "parser.tab.hh"
 #include "utf.h"
 
@@ -1715,16 +1715,25 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
     llvm::BasicBlock* bb1 =
         llvm::BasicBlock::Create(context, "", fun->function_);
 
+    auto sizeTy = llvm::Type::getScalarTy<size_t>(context);
+    auto int8PtrTy = llvm::Type::getInt8PtrTy(context);
+    auto int8Ty = llvm::Type::getInt8Ty(context);
+
     bb.SetInsertPoint(bb0);
     bb.CreateCondBr(
-        bb.CreateIsNull(bb.CreateLoad(size)),
+        bb.CreateIsNull(bb.CreateLoad(sizeTy, size)),
         i.second ? return_true : return_false,
         bb1);
 
     bb.SetInsertPoint(bb1);
-    llvm::LoadInst* byte = bb.CreateLoad(bb.CreateLoad(data));
-    bb.CreateStore(bb.CreateGEP(bb.CreateLoad(data), bb.getInt64(1)), data);
-    bb.CreateStore(bb.CreateSub(bb.CreateLoad(size), bb.getInt64(1)), size);
+    llvm::LoadInst* bytep = bb.CreateLoad(int8PtrTy, data);
+    llvm::LoadInst* byte = bb.CreateLoad(int8Ty, bytep);
+    bb.CreateStore(
+        bb.CreateGEP(int8Ty, bytep, bb.getInt64(1)),
+        data);
+    bb.CreateStore(
+        bb.CreateSub(bb.CreateLoad(sizeTy, size), bb.getInt64(1)),
+        size);
     // Set the "default" transition to ourselves for now. We could look it up,
     // but its BasicBlock might not exist yet, so we will just fix it up later.
     bb.CreateSwitch(byte, bb0);
@@ -1771,20 +1780,24 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
     }
   }
 
-  // Use the default optimisations.
-  llvm::PassManagerBuilder opt;
-
-  // Optimise the function.
-  llvm::legacy::FunctionPassManager fpm(fun->module_);
-  opt.populateFunctionPassManager(fpm);
-  fpm.doInitialization();
-  fpm.run(*fun->function_);
-  fpm.doFinalization();
-
   // Optimise the module.
-  llvm::legacy::PassManager mpm;
-  opt.populateModulePassManager(mpm);
-  mpm.run(*fun->module_);
+  // NOTE(junyer): This was cargo-culted from Clang. Ordering matters!
+  llvm::LoopAnalysisManager lam;
+  llvm::FunctionAnalysisManager fam;
+  llvm::CGSCCAnalysisManager cam;
+  llvm::ModuleAnalysisManager mam;
+
+  llvm::PassBuilder pb(fun->engine_->getTargetMachine());
+  pb.registerModuleAnalyses(mam);
+  pb.registerCGSCCAnalyses(cam);
+  pb.registerFunctionAnalyses(fam);
+  pb.registerLoopAnalyses(lam);
+  pb.registerModuleAnalyses(mam);
+  pb.crossRegisterProxies(lam, fam, cam, mam);
+
+  llvm::ModulePassManager mpm =
+      pb.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
+  mpm.run(*fun->module_, mam);
 }
 
 // This seems to be the only way to discover the machine code size.
