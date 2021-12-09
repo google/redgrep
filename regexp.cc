@@ -300,9 +300,9 @@ Exp Quantifier(const std::tuple<Exp, int, int>& quantifier) {
 Exp AnyCharacter() {
   Exp b1 = ByteRange(0x00, 0x7F);  // 0xxxxxxx
   Exp bx = ByteRange(0x80, 0xBF);  // 10xxxxxx
-  Exp b2 = ByteRange(0xC0, 0xDF);  // 110xxxxx
+  Exp b2 = ByteRange(0xC2, 0xDF);  // 110xxxxx
   Exp b3 = ByteRange(0xE0, 0xEF);  // 1110xxxx
-  Exp b4 = ByteRange(0xF0, 0xF7);  // 11110xxx
+  Exp b4 = ByteRange(0xF0, 0xF4);  // 11110xxx
   return Disjunction(b1,
                      Concatenation(b2, bx),
                      Concatenation(b3, bx, bx),
