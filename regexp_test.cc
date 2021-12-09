@@ -678,14 +678,14 @@ TEST(Parse, AnyCharacter) {
       Disjunction(
           ByteRange(0x00, 0x7F),
           Concatenation(
-              ByteRange(0xC0, 0xDF),
+              ByteRange(0xC2, 0xDF),
               ByteRange(0x80, 0xBF)),
           Concatenation(
               ByteRange(0xE0, 0xEF),
               ByteRange(0x80, 0xBF),
               ByteRange(0x80, 0xBF)),
           Concatenation(
-              ByteRange(0xF0, 0xF7),
+              ByteRange(0xF0, 0xF4),
               ByteRange(0x80, 0xBF),
               ByteRange(0x80, 0xBF),
               ByteRange(0x80, 0xBF))),
