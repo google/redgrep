@@ -22,11 +22,8 @@ genrule(
     name = "parser",
     srcs = ["parser.yy"],
     outs = [
-        "location.hh",
         "parser.tab.cc",
         "parser.tab.hh",
-        "position.hh",
-        "stack.hh",
     ],
     cmd = "bison -o $(location parser.tab.cc) $<",
 )

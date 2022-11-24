@@ -1369,33 +1369,31 @@ class ExpandQuantifiers : public Walker {
 };
 
 bool Parse(llvm::StringRef str, Exp* exp) {
-  redgrep_yy::Data yydata(str, exp);
-  redgrep_yy::parser parser(&yydata);
-  if (parser.parse() == 0) {
-    *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
-    *exp = StripGroups().Walk(*exp);
-    *exp = ExpandCharacterClasses().Walk(*exp);
-    bool exceeded = false;
-    *exp = ExpandQuantifiers(&exceeded).Walk(*exp);
-    return !exceeded;
+  yy::parser parser(&str, exp);
+  if (parser.parse() != 0) {
+    return false;
   }
-  return false;
+  *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
+  *exp = StripGroups().Walk(*exp);
+  *exp = ExpandCharacterClasses().Walk(*exp);
+  bool exceeded = false;
+  *exp = ExpandQuantifiers(&exceeded).Walk(*exp);
+  return !exceeded;
 }
 
 bool Parse(llvm::StringRef str, Exp* exp,
            std::vector<Mode>* modes, std::vector<int>* captures) {
-  redgrep_yy::Data yydata(str, exp);
-  redgrep_yy::parser parser(&yydata);
-  if (parser.parse() == 0) {
-    *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
-    *exp = ApplyGroups().Walk(*exp);
-    *exp = NumberGroups(modes, captures).Walk(*exp);
-    *exp = ExpandCharacterClasses().Walk(*exp);
-    bool exceeded = false;
-    *exp = ExpandQuantifiers(&exceeded).Walk(*exp);
-    return !exceeded;
+  yy::parser parser(&str, exp);
+  if (parser.parse() != 0) {
+    return false;
   }
-  return false;
+  *exp = FlattenConjunctionsAndDisjunctions().Walk(*exp);
+  *exp = ApplyGroups().Walk(*exp);
+  *exp = NumberGroups(modes, captures).Walk(*exp);
+  *exp = ExpandCharacterClasses().Walk(*exp);
+  bool exceeded = false;
+  *exp = ExpandQuantifiers(&exceeded).Walk(*exp);
+  return !exceeded;
 }
 
 bool Match(Exp exp, llvm::StringRef str) {

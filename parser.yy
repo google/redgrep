@@ -12,44 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-%skeleton "lalr1.cc"
-%name-prefix "redgrep_yy"
-%defines
-%locations
+%require "3.2"
+%language "c++"
+%define api.value.type {redgrep::Exp}
+%header
+%lex-param   {llvm::StringRef* str}
+%parse-param {llvm::StringRef* str} {redgrep::Exp* exp}
 
 %code requires {
-
 #include "llvm/ADT/StringRef.h"
 #include "regexp.h"
-#include "utf.h"
-
-namespace redgrep_yy {
-class location;
-}  // namespace redgrep_yy
-
-#define YYSTYPE redgrep::Exp
-#define YYLTYPE redgrep_yy::location
-
-namespace redgrep_yy {
-
-struct Data {
-  Data(llvm::StringRef str, redgrep::Exp* exp) : str_(str), exp_(exp) {}
-  ~Data() {}
-
-  llvm::StringRef str_;
-  redgrep::Exp* exp_;
-};
-
-}  // namespace redgrep_yy
-
-#define YYDATA redgrep_yy::Data
-
-int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata);
-
 }
 
-%lex-param   { YYDATA* yydata }
-%parse-param { YYDATA* yydata }
+%code {
+#include "utf.h"
+namespace yy {
+int yylex(redgrep::Exp* exp, llvm::StringRef* str);
+}  // namespace yy
+}
 
 %left DISJUNCTION
 %left CONJUNCTION
@@ -64,7 +44,7 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata);
 
 start:
   expression
-  { *yydata->exp_ = $1; }
+  { *exp = $1; }
 
 expression:
   expression DISJUNCTION expression
@@ -90,16 +70,6 @@ expression:
   { $$ = $1; }
 
 %%
-
-namespace redgrep_yy {
-
-void parser::error(const YYLTYPE&, const std::string&) {
-  // TODO(junyer): Do something?
-}
-
-}  // namespace redgrep_yy
-
-namespace {
 
 static bool Character(llvm::StringRef* input,
                       Rune* character) {
@@ -213,15 +183,14 @@ static bool Quantifier(Rune character,
   abort();
 }
 
-}  // namespace
+namespace yy {
 
-typedef redgrep_yy::parser::token_type TokenType;
-
-int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata) {
+int yylex(redgrep::Exp* exp, llvm::StringRef* str) {
   Rune character;
-  if (!Character(&yydata->str_, &character)) {
+  if (!Character(str, &character)) {
     return 0;
   }
+  typedef parser::token_type TokenType;
   switch (character) {
     case '|':
       return TokenType::DISJUNCTION;
@@ -234,33 +203,33 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata) {
     case '?':
     case '{': {
       int min, max;
-      if (!Quantifier(character, &yydata->str_, &min, &max)) {
+      if (!Quantifier(character, str, &min, &max)) {
         return TokenType::ERROR;
       }
       redgrep::Mode mode;
       bool capture = false;
-      if (yydata->str_.startswith("?")) {
-        yydata->str_ = yydata->str_.drop_front(1);
+      if (str->startswith("?")) {
+        *str = str->drop_front(1);
         mode = redgrep::kMinimal;
       } else {
         mode = redgrep::kMaximal;
       }
       // Somewhat perversely, we bundle the Group into the Quantifier and then
       // rebundle them back in the parser action.
-      *lvalp = redgrep::Group(-1, redgrep::Byte(-1), mode, capture);
-      *lvalp = redgrep::Quantifier(*lvalp, min, max);
+      *exp = redgrep::Group(-1, redgrep::Byte(-1), mode, capture);
+      *exp = redgrep::Quantifier(*exp, min, max);
       return TokenType::QUANTIFIER;
     }
     case '(': {
       redgrep::Mode mode = redgrep::kPassive;
       bool capture;
-      if (yydata->str_.startswith("?:")) {
-        yydata->str_ = yydata->str_.drop_front(2);
+      if (str->startswith("?:")) {
+        *str = str->drop_front(2);
         capture = false;
       } else {
         capture = true;
       }
-      *lvalp = redgrep::Group(-1, redgrep::Byte(-1), mode, capture);
+      *exp = redgrep::Group(-1, redgrep::Byte(-1), mode, capture);
       return TokenType::LEFT_PARENTHESIS;
     }
     case ')':
@@ -268,20 +237,20 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata) {
     case '[': {
       std::set<Rune> characters;
       bool complement;
-      if (!CharacterClass(&yydata->str_, &characters, &complement) ||
+      if (!CharacterClass(str, &characters, &complement) ||
           characters.empty()) {
         return TokenType::ERROR;
       }
-      *lvalp = redgrep::CharacterClass(characters, complement);
+      *exp = redgrep::CharacterClass(characters, complement);
       return TokenType::FUNDAMENTAL;
     }
     case '\\':
-      if (!Character(&yydata->str_, &character)) {
+      if (!Character(str, &character)) {
         return TokenType::ERROR;
       }
       switch (character) {
         case 'C':
-          *lvalp = redgrep::AnyByte();
+          *exp = redgrep::AnyByte();
           return TokenType::FUNDAMENTAL;
         case 'f':
           character = '\f';
@@ -300,10 +269,16 @@ int yylex(YYSTYPE* lvalp, YYLTYPE* llocp, YYDATA* yydata) {
       }
       // FALLTHROUGH
     default:
-      *lvalp = redgrep::Character(character);
+      *exp = redgrep::Character(character);
       return TokenType::FUNDAMENTAL;
     case '.':
-      *lvalp = redgrep::AnyCharacter();
+      *exp = redgrep::AnyCharacter();
       return TokenType::FUNDAMENTAL;
   }
 }
+
+void parser::error(const std::string&) {
+  // TODO(junyer): Do something?
+}
+
+}  // namespace yy
