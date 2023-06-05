@@ -16,8 +16,6 @@ licenses(["notice"])
 
 exports_files(["LICENSE"])
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
-
 cc_library(
     name = "utf",
     srcs = glob(["utf/*.c"]) + ["runetype/isvalidrune.c"],

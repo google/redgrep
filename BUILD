@@ -16,8 +16,6 @@ licenses(["notice"])
 
 exports_files(["LICENSE"])
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
-
 genrule(
     name = "parser",
     srcs = ["parser.yy"],

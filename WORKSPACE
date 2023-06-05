@@ -18,12 +18,6 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@com_github_google_redgrep//:redgrep_configure.bzl", "redgrep_configure")
 
 http_archive(
-    name = "rules_cc",
-    strip_prefix = "rules_cc-main",
-    urls = ["https://github.com/bazelbuild/rules_cc/archive/main.zip"],
-)
-
-http_archive(
     name = "com_google_googletest",
     strip_prefix = "googletest-main",
     urls = ["https://github.com/google/googletest/archive/main.zip"],
