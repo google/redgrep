@@ -35,8 +35,6 @@ load("@com_github_google_redgrep//:redgrep_configure.bzl", "redgrep_configure")
 redgrep_configure(name = "local_config_redgrep", llvm_config = "/path/to/llvm-config-14")
 ```
 
-Note that LLVM requires C++14; you must pass `--cxxopt=-std=c++14` to Bazel.
-
 ## Contact
 
 [redgrep@googlegroups.com](mailto:redgrep@googlegroups.com)
