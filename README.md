@@ -20,7 +20,7 @@ redgrep attempts to keep up with LLVM development, so you should
 (Debian and Ubuntu users might prefer to install the
 [nightly packages](https://apt.llvm.org/) instead.)
 
-If `llvm-config-14` is in your path, add the following to your `WORKSPACE` file:
+If `llvm-config-15` is in your path, add the following to your `WORKSPACE` file:
 
 ```
 load("@com_github_google_redgrep//:redgrep_configure.bzl", "redgrep_configure")
@@ -28,11 +28,11 @@ redgrep_configure(name = "local_config_redgrep")
 ```
 
 Otherwise, add the following to your `WORKSPACE` file and specify the path to
-`llvm-config-14`:
+`llvm-config-15`:
 
 ```
 load("@com_github_google_redgrep//:redgrep_configure.bzl", "redgrep_configure")
-redgrep_configure(name = "local_config_redgrep", llvm_config = "/path/to/llvm-config-14")
+redgrep_configure(name = "local_config_redgrep", llvm_config = "/path/to/llvm-config-15")
 ```
 
 ## Contact
