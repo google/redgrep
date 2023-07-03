@@ -41,7 +41,7 @@ cc_library(
         "-funsigned-char",
     ],
     deps = [
-        "@libutf_archive//:utf",
+        "@libutf//:utf",
         "@local_config_redgrep//:llvm",
     ],
 )

@@ -24,8 +24,8 @@ http_archive(
 )
 
 http_archive(
-    name = "libutf_archive",
-    build_file = "//third_party:libutf.BUILD",
+    name = "libutf",
+    build_file = "//:libutf-BUILD.bazel",
     strip_prefix = "libutf-master",
     urls = ["https://github.com/cls/libutf/archive/master.zip"],
 )
