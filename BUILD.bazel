@@ -37,9 +37,6 @@ cc_library(
         "redgrep.h",
         "regexp.h",
     ],
-    copts = [
-        "-funsigned-char",
-    ],
     deps = [
         "@libutf//:utf",
         "@local_config_redgrep//:llvm",

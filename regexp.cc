@@ -314,19 +314,19 @@ Exp Character(Rune character) {
   int len = runetochar(buf, &character);
   switch (len) {
     case 1:
-      return Byte(buf[0]);
+      return Byte(static_cast<unsigned char>(buf[0]));
     case 2:
-      return Concatenation(Byte(buf[0]),
-                           Byte(buf[1]));
+      return Concatenation(Byte(static_cast<unsigned char>(buf[0])),
+                           Byte(static_cast<unsigned char>(buf[1])));
     case 3:
-      return Concatenation(Byte(buf[0]),
-                           Byte(buf[1]),
-                           Byte(buf[2]));
+      return Concatenation(Byte(static_cast<unsigned char>(buf[0])),
+                           Byte(static_cast<unsigned char>(buf[1])),
+                           Byte(static_cast<unsigned char>(buf[2])));
     case 4:
-      return Concatenation(Byte(buf[0]),
-                           Byte(buf[1]),
-                           Byte(buf[2]),
-                           Byte(buf[3]));
+      return Concatenation(Byte(static_cast<unsigned char>(buf[0])),
+                           Byte(static_cast<unsigned char>(buf[1])),
+                           Byte(static_cast<unsigned char>(buf[2])),
+                           Byte(static_cast<unsigned char>(buf[3])));
     default:
       break;
   }
@@ -1398,7 +1398,7 @@ bool Parse(llvm::StringRef str, Exp* exp,
 
 bool Match(Exp exp, llvm::StringRef str) {
   while (!str.empty()) {
-    int byte = str[0];
+    int byte = static_cast<unsigned char>(str[0]);
     str = str.drop_front(1);
     Exp der = Derivative(exp, byte);
     der = Normalised(der);
@@ -1511,7 +1511,7 @@ size_t Compile(Exp exp, TNFA* tnfa) {
 bool Match(const DFA& dfa, llvm::StringRef str) {
   int curr = 0;
   while (!str.empty()) {
-    int byte = str[0];
+    int byte = static_cast<unsigned char>(str[0]);
     str = str.drop_front(1);
     auto transition = dfa.transition_.find(std::make_pair(curr, byte));
     if (transition == dfa.transition_.end()) {
@@ -1593,7 +1593,7 @@ bool Match(const TNFA& tnfa, llvm::StringRef str,
   curr_states.push_back(std::make_pair(0, std::vector<int>(2 * tnfa.modes_.size(), -1)));
   int pos = 0;
   while (!str.empty()) {
-    int byte = str[0];
+    int byte = static_cast<unsigned char>(str[0]);
     str = str.drop_front(1);
     // For each current state, determine the next states - applying Bindings -
     // and then sort them by comparing offsets. Doing this repeatedly from the
