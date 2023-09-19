@@ -155,7 +155,7 @@ const std::tuple<Exp, int, int>& Expression::quantifier() const {
   return *reinterpret_cast<std::tuple<Exp, int, int>*>(data());
 }
 
-int Compare(Exp x, Exp y) {
+int Expression::Compare(Exp x, Exp y) {
   if (x->kind() < y->kind()) {
     return -1;
   }

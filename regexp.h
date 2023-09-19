@@ -138,7 +138,18 @@ class Expression {
   Exp head() const { return subexpressions().front(); }
   Exp tail() const { return subexpressions().back(); }
 
+  friend bool operator<(Exp x, Exp y) { return Compare(x, y) < 0; }
+  friend bool operator<=(Exp x, Exp y) { return Compare(x, y) <= 0; }
+  friend bool operator==(Exp x, Exp y) { return Compare(x, y) == 0; }
+  friend bool operator!=(Exp x, Exp y) { return Compare(x, y) != 0; }
+  friend bool operator>(Exp x, Exp y) { return Compare(x, y) > 0; }
+  friend bool operator>=(Exp x, Exp y) { return Compare(x, y) >= 0; }
+
  private:
+  // Returns -1, 0 or +1 when x is less than, equal to or greater than y,
+  // respectively, so that we can define operators above for convenience.
+  static int Compare(Exp x, Exp y);
+
   const Kind kind_;
   const intptr_t data_;
   const bool norm_;
@@ -146,38 +157,6 @@ class Expression {
   Expression(const Expression&) = delete;
   Expression& operator=(const Expression&) = delete;
 };
-
-// Returns -1, 0 or +1 when x is less than, equal to or greater than y,
-// respectively, so that we can define operators et cetera for convenience.
-int Compare(Exp x, Exp y);
-
-}  // namespace redgrep
-
-namespace std {
-
-#define REDGREP_COMPARE_DEFINE_OPERATORS_ET_CETERA(op, fun) \
-                                                            \
-  inline bool operator op(redgrep::Exp x, redgrep::Exp y) { \
-    return redgrep::Compare(x, y) op 0;                     \
-  }                                                         \
-                                                            \
-  template <>                                               \
-  struct fun<redgrep::Exp> {                                \
-    bool operator()(redgrep::Exp x, redgrep::Exp y) const { \
-      return x op y;                                        \
-    }                                                       \
-  };
-
-REDGREP_COMPARE_DEFINE_OPERATORS_ET_CETERA(==, equal_to)
-REDGREP_COMPARE_DEFINE_OPERATORS_ET_CETERA(!=, not_equal_to)
-REDGREP_COMPARE_DEFINE_OPERATORS_ET_CETERA(<, less)
-REDGREP_COMPARE_DEFINE_OPERATORS_ET_CETERA(<=, less_equal)
-REDGREP_COMPARE_DEFINE_OPERATORS_ET_CETERA(>, greater)
-REDGREP_COMPARE_DEFINE_OPERATORS_ET_CETERA(>=, greater_equal)
-
-}  // namespace std
-
-namespace redgrep {
 
 // Builders for the various expression kinds.
 // Use the inline functions for convenience when building up expressions in
