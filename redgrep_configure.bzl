@@ -63,7 +63,7 @@ redgrep_configure = repository_rule(
     implementation = _redgrep_configure_impl,
     attrs = {
         "llvm_config": attr.string(
-            default = "llvm-config-15",
+            default = "llvm-config-16",
         ),
     },
     configure = True,

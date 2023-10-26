@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# LLVM requires C++14 at minimum.
+# LLVM requires C++17 at minimum.
 build --enable_platform_specific_config
-build:linux --cxxopt=-std=c++14
-build:macos --cxxopt=-std=c++14
-build:windows --cxxopt=/std:c++14
+build:linux --cxxopt=-std=c++17
+build:macos --cxxopt=-std=c++17
+build:windows --cxxopt=/std:c++17
