@@ -1648,7 +1648,7 @@ typedef bool NativeMatch(const char*, size_t);
 
 static llvm::FunctionType* getNativeMatchFnTy(llvm::LLVMContext& context) {
   return llvm::FunctionType::get(llvm::Type::getInt1Ty(context),
-                                 {llvm::Type::getInt8PtrTy(context),
+                                 {llvm::PointerType::getUnqual(context),
                                   llvm::Type::getScalarTy<size_t>(context)},
                                  false);
 }
@@ -1683,7 +1683,7 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
       llvm::BasicBlock::Create(context, "entry", fun->function_);
   bb.SetInsertPoint(entry);
   llvm::AllocaInst* data = bb.CreateAlloca(
-      llvm::Type::getInt8PtrTy(context), nullptr, "data");
+      llvm::PointerType::getUnqual(context), nullptr, "data");
   llvm::AllocaInst* size = bb.CreateAlloca(
       llvm::Type::getScalarTy<size_t>(context), nullptr, "size");
   llvm::Function::arg_iterator arg = fun->function_->arg_begin();
@@ -1714,7 +1714,7 @@ static void GenerateFunction(const DFA& dfa, Fun* fun) {
         llvm::BasicBlock::Create(context, "", fun->function_);
 
     auto sizeTy = llvm::Type::getScalarTy<size_t>(context);
-    auto int8PtrTy = llvm::Type::getInt8PtrTy(context);
+    auto int8PtrTy = llvm::PointerType::getUnqual(context);
     auto int8Ty = llvm::Type::getInt8Ty(context);
 
     bb.SetInsertPoint(bb0);
