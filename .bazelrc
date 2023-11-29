@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Enable layering check features. Useful on Clang only.
+build --features=layering_check
+# Enable parse headers features. Enforcing that headers are self-contained.
+build --features=parse_headers
+
 # LLVM requires C++17 at minimum.
 build --enable_platform_specific_config
 build:linux --cxxopt=-std=c++17
