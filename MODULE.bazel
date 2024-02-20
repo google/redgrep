@@ -1,4 +1,4 @@
-# Copyright 2021 Google Inc. All Rights Reserved.
+# Copyright 2024 Google Inc. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,4 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-workspace(name = "com_github_google_redgrep")
+module(
+    name = "redgrep",
+    version = "0.0.0",
+)
+
+internal_configure = use_extension("//:internal_configure.bzl", "internal_configure_extension")
+use_repo(internal_configure, "libutf", "local_config_llvm")
+
+bazel_dep(name = "googletest", version = "1.14.0.bcr.1", dev_dependency = True)

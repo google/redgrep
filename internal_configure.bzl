@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
 def _which(repository_ctx, program):
     path = repository_ctx.which(program)
     if not path:
@@ -22,49 +24,40 @@ def _execute(repository_ctx, arguments):
     result = repository_ctx.execute(arguments)
     if result.return_code:
         fail("Executing %r failed: %r" % (arguments, result.stderr))
-    return result
+    return result.stdout.strip()
 
-def _redgrep_configure_impl(repository_ctx):
-    llvm_config = repository_ctx.attr.llvm_config
-    if not llvm_config.startswith("/"):
-        llvm_config = _which(repository_ctx, llvm_config)
-
-    result = _execute(repository_ctx, [llvm_config, "--libdir"])
-    libdir = result.stdout.strip()
-
-    result = _execute(repository_ctx, [llvm_config, "--includedir"])
-    includedir = result.stdout.strip()
-
-    find = _which(repository_ctx, "find")
-
-    result = _execute(repository_ctx, [find, "-L", includedir, "-type", "f"])
-    hdrs = result.stdout.splitlines()
-
+def _llvm_repository_impl(repository_ctx):
+    llvm_config = _which(repository_ctx, "llvm-config-16")
+    libfiles = _execute(repository_ctx, [llvm_config, "--libfiles"])
+    includedir = _execute(repository_ctx, [llvm_config, "--includedir"])
     repository_ctx.symlink("/", "ROOT")
     repository_ctx.file(
-        "BUILD",
-        content = """
+        "BUILD.bazel",
+        content = """\
 cc_library(
     name = "llvm",
-    srcs = ["ROOT" + {libdir} + "/libLLVM.so"],
-    hdrs = ["ROOT" + hdr for hdr in {hdrs}],
+    srcs = ["ROOT" + {libfiles}],
+    hdrs = glob(["ROOT" + {includedir} + "/**/*.*"]),
     includes = ["ROOT" + {includedir}],
     visibility = ["//visibility:public"],
 )
 """.format(
-            libdir = repr(libdir),
+            libfiles = repr(libfiles),
             includedir = repr(includedir),
-            hdrs = repr(hdrs),
         ),
-        executable = False,
     )
 
-redgrep_configure = repository_rule(
-    implementation = _redgrep_configure_impl,
-    attrs = {
-        "llvm_config": attr.string(
-            default = "llvm-config-16",
-        ),
-    },
-    configure = True,
-)
+_llvm_repository = repository_rule(implementation = _llvm_repository_impl)
+
+def _internal_configure_extension_impl(module_ctx):
+    http_archive(
+        name = "libutf",
+        build_file = "//:libutf-BUILD.bazel",
+        strip_prefix = "libutf-master",
+        urls = ["https://github.com/cls/libutf/archive/master.zip"],
+    )
+    _llvm_repository(
+        name = "local_config_llvm",
+    )
+
+internal_configure_extension = module_extension(implementation = _internal_configure_extension_impl)

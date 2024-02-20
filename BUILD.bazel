@@ -39,7 +39,7 @@ cc_library(
     ],
     deps = [
         "@libutf//:utf",
-        "@local_config_redgrep//:llvm",
+        "@local_config_llvm//:llvm",
     ],
 )
 
@@ -48,8 +48,8 @@ cc_test(
     srcs = ["regexp_test.cc"],
     deps = [
         ":library",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )
 
