@@ -27,7 +27,7 @@ def _execute(repository_ctx, arguments):
     return result.stdout.strip()
 
 def _llvm_repository_impl(repository_ctx):
-    llvm_config = _which(repository_ctx, "llvm-config-16")
+    llvm_config = _which(repository_ctx, "llvm-config-17")
     libfiles = _execute(repository_ctx, [llvm_config, "--libfiles"])
     includedir = _execute(repository_ctx, [llvm_config, "--includedir"])
     repository_ctx.symlink("/", "ROOT")

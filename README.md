@@ -20,7 +20,7 @@ redgrep attempts to keep up with LLVM development, so you should
 (Debian and Ubuntu users might prefer to install the
 [nightly packages](https://apt.llvm.org/) instead.)
 
-`llvm-config-16` must be in your path.
+`llvm-config-17` must be in your path.
 
 ## Contact
 
